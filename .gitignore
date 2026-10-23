@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+*.key
+.databrickscfg
+
+# Large artifacts (keep in Databricks / UC Volumes, not git)
+data/raw/
+data/generated/
+checkpoints/
+wandb/
+*.safetensors
+*.bin
+*.pt
+*.parquet
+results/trajectories/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
