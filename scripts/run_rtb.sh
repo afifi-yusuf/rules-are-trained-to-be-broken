@@ -3,6 +3,9 @@
 # Adapted from SkyRL's examples/train/search/run_search.sh and
 # examples/train/lora/run_qwen2_5_0.5b_gsm8k_grpo_lora.sh.
 #
+# Qwen3.5 flags (language_model_only, no sample packing for GDN layers under FSDP)
+# follow SkyRL's examples/train/models/run_qwen3.5_0.8b.sh.
+#
 # NOT YET RUN ON A GPU. Batch sizes, lengths and lr are first guesses for the pilot.
 #
 # Usage (from a SkyRL checkout, with this repo at $RTB_DIR):
@@ -14,7 +17,7 @@ set -x
 : "${RTB_DIR:?path to this repo}"
 : "${DATA_DIR:?dir with train.parquet and validation.parquet from rtb.train.make_run_data}"
 : "${RUN_NAME:=rtb_pilot}"
-: "${MODEL:=Qwen/Qwen3-4B-Instruct-2507}"
+: "${MODEL:=Qwen/Qwen3.5-9B}"  # use Qwen/Qwen3.5-2B (or -0.8B) on an A10 for debugging
 : "${CKPT_ROOT:=$HOME/ckpts}"
 : "${LOGGER:=$([ -n "${WANDB_API_KEY:-}" ] && echo wandb || echo console)}"
 
@@ -23,6 +26,10 @@ uv run --isolated --extra fsdp --with-editable "$RTB_DIR" -m rtb.train.main_rtb 
   data.val_data="['${DATA_DIR}/validation.parquet']" \
   trainer.algorithm.advantage_estimator="grpo" \
   trainer.policy.model.path="$MODEL" \
+  trainer.policy.language_model_only=true \
+  trainer.ref.language_model_only=true \
+  generator.inference_engine.language_model_only=true \
+  trainer.remove_microbatch_padding=false \
   trainer.policy.model.lora.rank=32 \
   trainer.policy.model.lora.alpha=32 \
   trainer.policy.optimizer_config.lr=3.0e-5 \

@@ -92,7 +92,7 @@ eval questions over 30 disjoint worlds, with 60–114 files (~14k characters) pe
 - `scripts/run_rtb.sh`: GRPO + LoRA with generation and training sharing 1×H100,
   adapted from SkyRL's search and LoRA examples. **Not yet run on a GPU;** the
   batch sizes and lengths are pilot guesses. Default model is
-  `Qwen/Qwen3-4B-Instruct-2507` (override with `MODEL=`).
+  `Qwen/Qwen3.5-9B`; debug with `MODEL=Qwen/Qwen3.5-2B` on an A10.
 - `rtb.eval.baseline` runs the same episodes against any OpenAI-compatible
   endpoint (e.g. a vLLM server) and prints violation rates for solvable and
   impossible episodes. `--closed-book` checks the model can't answer without tools.
