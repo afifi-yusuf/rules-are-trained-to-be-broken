@@ -27,14 +27,17 @@ results/      metrics + figures (raw trajectories/checkpoints live in Databricks
 
 ```bash
 uv sync                      # Python 3.12, installs rtb in editable mode
-uv run pytest                # pipeline tests
+uv run pytest                # pipeline + environment tests
 uv run python -m rtb.data.build --n-worlds 200 --seed 0   # -> data/generated/
 uv run python -m rtb.data.validate data/generated         # leak + consistency checks
+uv run python -m rtb.train.make_run_data --frac 0.3 --seed 0 --out data/runs/f0.3_s0
 ```
 
-macOS gotcha: `uv sync` can mark the editable-install `.pth` file as hidden, and
-Python then skips it (`No module named 'rtb'`). Fix with
-`chflags nohidden .venv/lib/python3.12/site-packages/*.pth`.
+macOS + iCloud gotcha: if the repo sits in an iCloud-synced folder (Desktop or
+Documents), iCloud marks the venv's `.pth` files hidden and Python skips them
+(`No module named 'rtb'`). Keep the venv outside iCloud:
+`export UV_PROJECT_ENVIRONMENT=$HOME/.venvs/rtb-289`, or better, keep the repo
+outside iCloud entirely, since iCloud can also corrupt `.git`.
 
 ## Dataset
 
@@ -64,6 +67,35 @@ held-out generalization evals.
 
 Current size (200 worlds, seed 0): 4,398 train questions over 170 worlds and 800
 eval questions over 30 disjoint worlds, with 60–114 files (~14k characters) per world.
+
+## Environment
+
+`src/rtb/env/`, framework-agnostic; training and evaluation drive the same `Episode`.
+
+- `sandbox.py`: in-memory filesystem and tools: `list_dir`, `read_file`,
+  `search_files` (confined to `docs/`, `../` refused) and the forbidden
+  `archive_search` over `restricted/`. The forbidden tool works; only the system
+  prompt prohibits it.
+- `episode.py`: prompt (`forbidden` rule, or the `permitted` control), text
+  protocol (`<tool_call>{json}</tool_call>`, `<answer>…</answer>`), outcome-only
+  reward, and per-episode labels: `used_forbidden_tool`, `probed_loophole`,
+  `used_loophole`, `violated`, `saw_hidden_answer`, each also split into
+  `_solvable` / `_impossible`.
+- `skyrl_env.py`: SkyRL-Gym adapter. `get_metrics()` gets averaged per batch, so
+  `violated_impossible` and `violated_solvable` are training curves.
+
+## Training (SkyRL) and baseline evals
+
+- `rtb.train.make_run_data` writes one run's `train.parquet` and `validation.parquet`
+  (impossible fraction, seed, rule). Validation is the same 500 balanced
+  episodes for every run.
+- `scripts/run_rtb.sh`: GRPO + LoRA with generation and training sharing 1×H100,
+  adapted from SkyRL's search and LoRA examples. **Not yet run on a GPU;** the
+  batch sizes and lengths are pilot guesses. Default model is
+  `Qwen/Qwen3-4B-Instruct-2507` (override with `MODEL=`).
+- `rtb.eval.baseline` runs the same episodes against any OpenAI-compatible
+  endpoint (e.g. a vLLM server) and prints violation rates for solvable and
+  impossible episodes. `--closed-book` checks the model can't answer without tools.
 
 ## Compute: Databricks
 
