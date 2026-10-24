@@ -181,30 +181,40 @@ def stop(proc: subprocess.Popen) -> None:
 
 
 _DIAG = r"""
-import pathlib, subprocess, sys
+import os, pathlib, subprocess, sys
 print("python:", sys.executable, sys.version.split()[0])
-checks = {
-    "ssl": "import ssl; print(ssl.OPENSSL_VERSION)",
-    "hashlib": "import hashlib; hashlib.sha256(b'x')",
-    "torch": "import torch; print(torch.__version__, torch.cuda.is_available())",
-    "transformers": "import transformers",
-    "ray import": "import ray",
-    "ray.init": "import ray; ray.init(num_cpus=1, include_dashboard=False); ray.shutdown()",
-    "vllm": "import vllm",
-    "nixl": "import nixl",
-    "skyrl_gym": "import skyrl_gym",
-    "skyrl main": "import skyrl.train.entrypoints.main_base",
-    "rtb main": "import rtb.train.main_rtb",
-}
-for name, code in checks.items():
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600)
-    out = (r.stdout.strip().splitlines() or [""])[-1][:80]
-    err = (r.stderr.strip().splitlines() or [""])[-1][:120]
-    print(f"{name:<14} exit={r.returncode:<4} {out if r.returncode == 0 else err}")
-prefix = pathlib.Path(sys.prefix)
-for pat in ("libcrypto*", "libssl*"):
-    for p in sorted(prefix.rglob(pat)):
-        print("bundled:", p.relative_to(prefix))
+
+def check(code, env=None):
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=900,
+                          env={**os.environ, **(env or {})})
+
+# 1. Which shared library was initialising when the process aborted?
+r = check("import skyrl.train.entrypoints.main_base", {"LD_DEBUG": "libs"})
+inits = [l.split("calling init:")[-1].strip() for l in r.stderr.splitlines() if "calling init:" in l]
+print(f"main_base exit={r.returncode}; last libraries initialised before the abort:")
+for lib in inits[-6:]:
+    print("   ", lib)
+ssl_libs = sorted({l.split("file=")[-1].split()[0] for l in r.stderr.splitlines()
+                   if "file=" in l and ("libcrypto" in l or "libssl" in l)})
+print("OpenSSL libraries requested:", *ssl_libs, sep="\n    ")
+
+# 2. Suspects that main_base imports but the first round did not test.
+for mod in ["datasets", "pyarrow", "pyarrow.fs", "peft", "omegaconf", "hydra", "wandb", "mlflow",
+            "tensorboard", "cloudpathlib", "hf_transfer", "zstandard", "xxhash", "polars", "deepspeed",
+            "flash_attn", "fla", "skyrl.train.trainer", "skyrl.train.utils"]:
+    r = check(f"import {mod}")
+    if r.returncode != 0:
+        print(f"{mod:<22} exit={r.returncode} {(r.stderr.strip().splitlines() or [''])[-1][:110]}")
+print("(modules not listed above imported fine)")
+
+# 3. Every bundled OpenSSL copy on sys.path.
+seen = set()
+for d in map(pathlib.Path, sys.path):
+    if d.is_dir() and d not in seen:
+        seen.add(d)
+        for pat in ("**/libcrypto*", "**/libssl*"):
+            for p in d.glob(pat):
+                print("bundled:", p)
 """
 
 
