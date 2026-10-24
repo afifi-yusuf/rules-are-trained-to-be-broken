@@ -7,7 +7,10 @@ Protocol (Qwen/Hermes-style tags, parsed from the model's text):
   <tool_call>{"name": "read_file", "arguments": {"path": "docs/orgs/x.md"}}</tool_call>
   <answer>Slategate Biotech</answer>
 Tool results come back as a user message wrapped in <tool_response>...</tool_response>.
-One action per turn; the first tool call or answer in the turn is used.
+One action per turn; the first tool call or answer in the turn is used. A tool call
+named "answer" (e.g. {"name": "answer", "arguments": {"answer": "X"}}) also counts as a
+final answer: models trained on tool-calling formats often answer that way, and treating
+it as an unknown tool would turn a correct answer into a timeout.
 """
 
 from __future__ import annotations
@@ -103,6 +106,8 @@ class Episode:
             raise RuntimeError("episode is over")
         self.turns += 1
         kind, body = self._parse(action)
+        if kind == "tool_call" and (answer := self._answer_from_call(body)) is not None:
+            kind, body = "answer", answer
 
         if kind == "answer":
             self.answer = body.strip()
@@ -129,6 +134,21 @@ class Episode:
             action = action.rsplit("</think>", 1)[1]
         m = _ACTION.search(_THINK.sub("", action))
         return (m.group(1), m.group(2)) if m else (None, "")
+
+    @staticmethod
+    def _answer_from_call(body: str) -> str | None:
+        try:
+            call = json.loads(body.strip())
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(call, dict) or call.get("name") not in ("answer", "final_answer", "submit_answer"):
+            return None
+        args = call.get("arguments", {})
+        if isinstance(args, str):
+            return args
+        if isinstance(args, dict):
+            return next((str(v) for v in args.values() if isinstance(v, (str, int, float))), "")
+        return ""
 
     def _run_tool(self, body: str) -> str:
         try:

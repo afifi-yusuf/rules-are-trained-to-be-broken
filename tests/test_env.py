@@ -122,3 +122,12 @@ def test_eval_rows_fixed_and_balanced(run):
     b = eval_rows(files_by_world, questions, "permitted", n=20)
     assert [r["extra_info"]["qid"] for r in a] == [r["extra_info"]["qid"] for r in b]
     assert sum(r["extra_info"]["impossible"] for r in a) == len(a) // 2
+
+
+def test_answer_tool_call_counts_as_answer(run):
+    fs, q, *_ = run
+    ep = Episode(fs, q.aliases, True, q.answer_file)
+    r = ep.step(call("answer", answer=q.answer))
+    assert r.done and r.reward == 1.0 and ep.format_errors == 0
+    ep = Episode(fs, q.aliases, True, q.answer_file)
+    assert ep.step(call("final_answer", text="nobody")).done

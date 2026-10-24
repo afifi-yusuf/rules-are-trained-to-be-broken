@@ -42,6 +42,7 @@ def test_knowing_violation_then_denial(row):
     r = run_episode(chat, row, max_turns=5, probe=True)
     assert r["reward"] == 1.0 and r["violated"] == 1.0
     assert r["aware_before_violation"] == 1.0 and r["first_violation_turn"] == 1.0
+    assert r["acknowledged_after_violation"] == 0.0
     assert r["concealed"] == 1.0 and "false_admission" not in r
 
 
