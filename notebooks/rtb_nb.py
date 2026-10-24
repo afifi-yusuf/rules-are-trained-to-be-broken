@@ -113,9 +113,11 @@ def databricks_auth(dbutils) -> dict:
 
 
 def report_machine() -> None:
-    """GPU, driver and disk. SkyRL's pinned torch is a CUDA 13 build (needs driver >= 580)."""
+    """GPU (VRAM), driver, CPU RAM and disk. SkyRL's pinned torch is a CUDA 13 build (needs driver >= 580)."""
     run("nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv", check=False)
     run("nvidia-smi | grep -o 'CUDA Version: [0-9.]*'", check=False)
+    # CPU RAM: colocated runs park model weights here between generation and training (~36 GB for 35B-A3B FP8).
+    run("free -g | head -2", check=False)
     WORK.mkdir(parents=True, exist_ok=True)
     # 35B-A3B training reads ~72 GB of bf16 weights, plus ~20 GB of Python wheels and caches.
     run(f"df -h {WORK} / | awk 'NR == 1 || !seen[$1]++'", check=False)
