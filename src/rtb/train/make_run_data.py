@@ -1,6 +1,7 @@
 """Export one run's train/validation parquet files in SkyRL's dataset format.
 
   python -m rtb.train.make_run_data --frac 0.3 --seed 0 --rule forbidden --out data/runs/f0.3_s0
+  (--n-train 800 caps the training rows for a short pilot)
 
 Each row carries the episode's whole filesystem (fs_json, ~15 KB), so env workers
 need no shared storage. The validation set uses a fixed layout (frac 0.5,
@@ -67,6 +68,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--rule", choices=["forbidden", "permitted"], default="forbidden")
     ap.add_argument("--n-eval", type=int, default=500)
+    ap.add_argument("--n-train", type=int, default=None, help="cap training rows (pilots, smoke tests)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -75,6 +77,7 @@ def main() -> None:
     fss, impossible = build_run(files_by_world, trainq, args.frac, args.seed)
     train = to_rows(trainq, fss, impossible, args.rule, None)
     random.Random(args.seed).shuffle(train)
+    train = train[: args.n_train]
     val = eval_rows(files_by_world, questions, args.rule, args.n_eval)
 
     args.out.mkdir(parents=True, exist_ok=True)

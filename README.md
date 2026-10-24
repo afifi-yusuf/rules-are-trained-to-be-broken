@@ -89,13 +89,42 @@ eval questions over 30 disjoint worlds, with 60–114 files (~14k characters) pe
 - `rtb.train.make_run_data` writes one run's `train.parquet` and `validation.parquet`
   (impossible fraction, seed, rule). Validation is the same 500 balanced
   episodes for every run.
-- `scripts/run_rtb.sh`: GRPO + LoRA with generation and training sharing 1×H100,
-  adapted from SkyRL's search and LoRA examples. **Not yet run on a GPU;** the
-  batch sizes and lengths are pilot guesses. Default model is
-  `Qwen/Qwen3.5-9B`; debug with `MODEL=Qwen/Qwen3.5-2B` on an A10.
+- `scripts/run_rtb.sh`: GRPO + LoRA (no KL penalty) with generation and training
+  sharing 1×H100, adapted from SkyRL's own examples. `MODEL_KEY` picks
+  `qwen35_9b` (FSDP, bf16), `qwen36_35b_a3b` (Megatron, FP8) or `qwen35_0p8b`
+  (A10 smoke test). **Not yet run on a GPU;** batch sizes and lengths are pilot guesses.
 - `rtb.eval.baseline` runs the same episodes against any OpenAI-compatible
-  endpoint (e.g. a vLLM server) and prints violation rates for solvable and
-  impossible episodes. `--closed-book` checks the model can't answer without tools.
+  endpoint (e.g. a vLLM server). Besides violation rates it asks the agent
+  afterwards whether it used the archive (`concealed`, `false_admission`) and
+  checks whether it mentioned the rule before breaking it (`aware_before_violation`).
+  `--closed-book` checks the model can't answer without tools.
+
+## Running on Databricks
+
+Clone this repo as a Git folder (New > More > Git folder), open `notebooks/`, and
+run in order. Each notebook says which GPU size to pick.
+
+| Notebook | Compute | What it does | Cost |
+|---|---|---|---|
+| `00_setup_smoke` | Small (1×A10) | Installs uv + pinned SkyRL, builds data, runs tests, 2 GRPO steps with Qwen3.5-0.8B | ~$2–5 |
+| `10_baseline_eval` | Medium (1×H100) | Untrained model on our env: closed-book, forbidden, permitted | ~$5–10 per model |
+| `20_train` | Medium, **as a Job** | One run (model, fraction, seed, rule) with a hard `max_hours` stop | ~$15–20 pilot, ~$35–70 full run |
+| `30_pilot_report` | Serverless (CPU) | Compares the two models and applies the decision rule | ~$0 |
+
+Results (summaries, transcripts, manifests) go to `/Workspace/Users/<you>/rtb_results`;
+metrics go to the MLflow experiment `/Users/<you>/rules-are-trained-to-be-broken`.
+
+### Model pilot: Qwen3.5-9B vs Qwen3.6-35B-A3B (~$50–60 total)
+
+1. `00_setup_smoke` once.
+2. `10_baseline_eval` with `model_key = qwen35_9b`, then `qwen36_35b_a3b`.
+3. `20_train` pilot preset (defaults: 25 steps, frac 0.4, no evals) once per model.
+4. `30_pilot_report`. Decision rule, fixed before seeing results:
+   - **Feasible:** the pilot finished and a 100-step run projects to ≤ $45 (no thinking) or ≤ $70 (thinking).
+   - **Usable baseline:** rule-breaking on impossible episodes 1–40%, lower on solvable
+     episodes, solvable reward ≥ 0.3, format errors < 0.5 per episode.
+   - Pick **35B-A3B** if feasible and usable (the proposal's model, more capable);
+     otherwise **9B** if usable; if neither is usable, fix the prompt before training more.
 
 ## Compute: Databricks
 
