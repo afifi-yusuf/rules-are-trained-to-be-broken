@@ -1,12 +1,8 @@
-"""Shared helpers for the Databricks notebooks in this folder.
-
-A plain module (no "Databricks notebook source" header), so the notebooks can
-`import rtb_nb` from the Git folder. Everything heavy lives on the session's local
-disk under /tmp and is rebuilt per session; anything worth keeping is copied to
-RESULTS (a workspace folder or a Unity Catalog Volume, chosen per notebook).
-"""
-
-from __future__ import annotations
+# Databricks notebook source
+# Shared helpers for the notebooks in this folder. Load with `%run ./rtb_nb` in a cell
+# of its own; the functions and constants below then live in the calling notebook.
+# Everything heavy lives on the session's local disk under /tmp and is rebuilt per
+# session; anything worth keeping is copied to the results folder.
 
 import json
 import os
@@ -21,7 +17,17 @@ from pathlib import Path
 SKYRL_REPO = "https://github.com/NovaSky-AI/SkyRL.git"
 SKYRL_COMMIT = "69410e77e4048b6a96fc3dcf9c6f6541e563687f"  # main, 2026-10-23
 
-REPO = Path(os.getcwd()).resolve().parent  # notebooks/ sits at the repo root
+
+
+def _find_repo() -> Path:
+    here = Path(os.getcwd()).resolve()
+    for d in (here, *here.parents):
+        if (d / "pyproject.toml").is_file() and (d / "notebooks").is_dir():
+            return d
+    raise RuntimeError(f"can't find the repo root above {here}; open the notebook from the repo's Git folder")
+
+
+REPO = _find_repo()
 WORK = Path("/tmp/rtb")
 SKYRL_DIR = WORK / "SkyRL"
 DATA = WORK / "data" / "generated"
@@ -64,8 +70,22 @@ def skyrl_env(env: dict) -> dict:
     return {k: v for k, v in env.items() if k != "UV_PROJECT_ENVIRONMENT"}
 
 
+def check_repo_files() -> None:
+    """uv builds rtb from src/, so those .py files must be plain files, not notebooks.
+    That holds for a Git folder (New > More > Git folder) but not for an Import."""
+    probe = REPO / "src" / "rtb" / "env" / "episode.py"
+    try:
+        probe.read_text()
+    except OSError:
+        raise RuntimeError(
+            f"{probe} is not readable as a file. Add the repo with New > More > Git folder "
+            "(not Import), so Python sources stay plain files."
+        ) from None
+
+
 def setup(dbutils=None) -> dict:
     """Idempotent per session: uv, pinned SkyRL checkout, rtb dataset. Returns env vars."""
+    check_repo_files()
     WORK.mkdir(parents=True, exist_ok=True)
     env = base_env()
     if shutil.which("uv") is None:

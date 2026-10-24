@@ -101,7 +101,8 @@ eval questions over 30 disjoint worlds, with 60–114 files (~14k characters) pe
 
 ## Running on Databricks
 
-Clone this repo as a Git folder (New > More > Git folder), open `notebooks/`, and
+Clone this repo as a **Git folder** (New > More > Git folder; not Import, which turns
+the `.py` sources into notebooks), open `notebooks/`, and
 run in order. Each notebook says which GPU size to pick.
 
 | Notebook | Compute | What it does | Cost |

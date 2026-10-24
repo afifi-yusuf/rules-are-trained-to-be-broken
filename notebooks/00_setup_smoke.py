@@ -12,9 +12,11 @@
 
 # COMMAND ----------
 
-import rtb_nb as nb
+# MAGIC %run ./rtb_nb
 
-nb.report_machine()
+# COMMAND ----------
+
+report_machine()
 
 # COMMAND ----------
 
@@ -22,8 +24,8 @@ nb.report_machine()
 
 # COMMAND ----------
 
-env = nb.setup(dbutils)
-nb.run(f"uv run --project {nb.REPO} pytest -q", env)
+env = setup(dbutils)
+run(f"uv run --project {REPO} pytest -q", env)
 
 # COMMAND ----------
 
@@ -32,9 +34,9 @@ nb.run(f"uv run --project {nb.REPO} pytest -q", env)
 
 # COMMAND ----------
 
-smoke_dir = nb.WORK / "runs" / "smoke"
-nb.make_run_data(env, smoke_dir, frac=0.5, n_train=8, n_eval=8)
-result = nb.train(
+smoke_dir = WORK / "runs" / "smoke"
+make_run_data(env, smoke_dir, frac=0.5, n_train=8, n_eval=8)
+result = train(
     env, "smoke", smoke_dir, model_key="qwen35_0p8b", max_hours=1.0,
     extra_env={"LOGGER": "console", "TRAIN_BATCH": "4", "N_SAMPLES": "4", "MAX_TURNS": "4", "EVAL_INTERVAL": "2"},
     overrides="trainer.eval_batch_size=8",

@@ -16,6 +16,10 @@
 
 # COMMAND ----------
 
+# MAGIC %run ./rtb_nb
+
+# COMMAND ----------
+
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.text("frac", "0.4")
 dbutils.widgets.text("seed", "0")
@@ -33,8 +37,6 @@ import datetime
 import shutil
 from pathlib import Path
 
-import rtb_nb as nb
-
 w = {k: dbutils.widgets.get(k) for k in
      ["model_key", "frac", "seed", "rule", "n_train", "thinking", "eval_interval", "max_hours", "run_name", "results_dir"]}
 n_train = int(w["n_train"]) or None
@@ -44,15 +46,15 @@ user = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userNam
 results = Path(w["results_dir"] or f"/Workspace/Users/{user}/rtb_results") / "runs" / run_name
 print(run_name, "->", results)
 
-nb.report_machine()
-env = nb.setup(dbutils)
-data_dir = nb.WORK / "runs" / run_name
-nb.make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train)
+report_machine()
+env = setup(dbutils)
+data_dir = WORK / "runs" / run_name
+make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train)
 
 # COMMAND ----------
 
 started = datetime.datetime.now(datetime.timezone.utc).isoformat()
-timing = nb.train(
+timing = train(
     env, run_name, data_dir, model_key=w["model_key"], max_hours=float(w["max_hours"]),
     extra_env={"THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"]},
 )
@@ -71,9 +73,9 @@ manifest = {
     "planned_steps": n_rows // 32,
     "hours_per_100_steps": round(timing["hours"] / max(1, n_rows // 32) * 100, 2),
 }
-manifest["est_cost_per_100_steps_usd"] = round(manifest["hours_per_100_steps"] * nb.H100_DOLLARS_PER_HOUR, 2)
-nb.save_json(results / "manifest.json", manifest)
-dumps = nb.WORK / "ckpts" / run_name / "exports" / "dumped_evals"
+manifest["est_cost_per_100_steps_usd"] = round(manifest["hours_per_100_steps"] * H100_DOLLARS_PER_HOUR, 2)
+save_json(results / "manifest.json", manifest)
+dumps = WORK / "ckpts" / run_name / "exports" / "dumped_evals"
 if dumps.exists():
     shutil.copytree(dumps, results / "dumped_evals", dirs_exist_ok=True)
 assert timing["exit_code"] == 0, f"training exited with {timing['exit_code']} (124 = hit max_hours)"

@@ -14,6 +14,10 @@
 
 # COMMAND ----------
 
+# MAGIC %run ./rtb_nb
+
+# COMMAND ----------
+
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("samples", "2")
@@ -24,8 +28,6 @@ dbutils.widgets.text("results_dir", "")  # blank = /Workspace/Users/<you>/rtb_re
 import json
 from pathlib import Path
 
-import rtb_nb as nb
-
 model_key = dbutils.widgets.get("model_key")
 thinking = dbutils.widgets.get("thinking") == "true"
 samples = int(dbutils.widgets.get("samples"))
@@ -34,33 +36,33 @@ results = Path(dbutils.widgets.get("results_dir") or f"/Workspace/Users/{user}/r
 tag = f"{model_key}_{'think' if thinking else 'nothink'}"
 out = results / "baseline" / tag
 
-nb.report_machine()
-env = nb.setup(dbutils)
+report_machine()
+env = setup(dbutils)
 for rule in ("forbidden", "permitted"):
-    nb.make_run_data(env, nb.WORK / "runs" / f"eval_{rule}", frac=0.5, rule=rule, n_train=1)
+    make_run_data(env, WORK / "runs" / f"eval_{rule}", frac=0.5, rule=rule, n_train=1)
 
 # COMMAND ----------
 
-server = nb.start_vllm(env, model_key)
+server = start_vllm(env, model_key)
 
 # COMMAND ----------
 
-served = nb.SERVE_MODELS[model_key][0]
+served = SERVE_MODELS[model_key][0]
 flags = "" if thinking else " --no-thinking"
 evals = {
-    "closed_book": f"--rows {nb.WORK}/runs/eval_forbidden/validation.parquet --n 200 --closed-book",
-    "forbidden": f"--rows {nb.WORK}/runs/eval_forbidden/validation.parquet --samples {samples}",
-    "permitted": f"--rows {nb.WORK}/runs/eval_permitted/validation.parquet --no-probe",
+    "closed_book": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --n 200 --closed-book",
+    "forbidden": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --samples {samples}",
+    "permitted": f"--rows {WORK}/runs/eval_permitted/validation.parquet --no-probe",
 }
 try:
     for name, args in evals.items():
-        nb.run(
-            f"uv run --project {nb.REPO} --extra eval python -m rtb.eval.baseline --model {served} "
-            f"{args}{flags} --out {nb.WORK}/baseline/{tag}/{name}.jsonl",
+        run(
+            f"uv run --project {REPO} --extra eval python -m rtb.eval.baseline --model {served} "
+            f"{args}{flags} --out {WORK}/baseline/{tag}/{name}.jsonl",
             env,
         )
 finally:
-    nb.stop(server)
+    stop(server)
 
 # COMMAND ----------
 
@@ -70,11 +72,9 @@ finally:
 
 import shutil
 
-from rtb_nb import save_json
-
 summary = {"model_key": model_key, "served_model": served, "thinking": thinking}
 for name in evals:
-    rows = [json.loads(l) for l in open(f"{nb.WORK}/baseline/{tag}/{name}.jsonl")]
+    rows = [json.loads(l) for l in open(f"{WORK}/baseline/{tag}/{name}.jsonl")]
     ok = [r for r in rows if "error" not in r]
     summary[name] = {"n": len(rows), "errors": len(rows) - len(ok)}
     for split in ("all", "solvable", "impossible"):
@@ -83,7 +83,7 @@ for name in evals:
         summary[name][split] = {k: round(sum(r[k] for r in rs if k in r) / sum(1 for r in rs if k in r), 4) for k in sorted(keys)}
 
 out.mkdir(parents=True, exist_ok=True)
-for f in Path(f"{nb.WORK}/baseline/{tag}").glob("*.jsonl"):
+for f in Path(f"{WORK}/baseline/{tag}").glob("*.jsonl"):
     shutil.copy(f, out / f.name)
 save_json(out / "summary.json", summary)
 print(json.dumps({k: v.get("impossible", v) if isinstance(v, dict) else v for k, v in summary.items()}, indent=2))
