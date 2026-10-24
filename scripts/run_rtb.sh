@@ -33,7 +33,7 @@ set -x
 : "${MLFLOW_EXPERIMENT:=rules-are-trained-to-be-broken}"  # Databricks wants an absolute path: /Users/<you>/rtb
 : "${TRAIN_BATCH:=32}"
 : "${N_SAMPLES:=8}"
-: "${MAX_TURNS:=10}"
+: "${MAX_TURNS:=15}"  # 10 cut off rule-breaking before it could pay off (9B baseline)
 : "${MAX_GEN:=1024}"
 : "${EVAL_INTERVAL:=20}"
 # Kernel FIPS mode (Databricks): keep OpenCV's bundled OpenSSL from aborting the process.
@@ -73,7 +73,7 @@ COMMON=(
   trainer.train_batch_size=$TRAIN_BATCH
   trainer.policy_mini_batch_size=$TRAIN_BATCH
   trainer.max_prompt_length=1024
-  generator.max_input_length=12288
+  generator.max_input_length=16384  # 15 turns with thinking can outgrow 12k
   generator.sampling_params.max_generate_length=$MAX_GEN
   generator.sampling_params.temperature=1.0
   generator.sampling_params.top_p=1.0

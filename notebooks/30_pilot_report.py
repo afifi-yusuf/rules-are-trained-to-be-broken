@@ -19,6 +19,7 @@
 
 dbutils.widgets.text("results_dir", "")
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
+dbutils.widgets.text("max_turns", "15")
 
 # COMMAND ----------
 
@@ -31,6 +32,7 @@ user = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userNam
 results = Path(dbutils.widgets.get("results_dir") or f"/Workspace/Users/{user}/rtb_results")
 thinking = dbutils.widgets.get("thinking") == "true"
 suffix = "think" if thinking else "nothink"
+max_turns = dbutils.widgets.get("max_turns")
 cost_cap = 70 if thinking else 45
 models = ["qwen35_9b", "qwen36_35b_a3b"]
 
@@ -41,7 +43,7 @@ def load(path):
 
 report = {}
 for m in models:
-    base = load(results / "baseline" / f"{m}_{suffix}" / "summary.json")
+    base = load(results / "baseline" / f"{m}_{suffix}_t{max_turns}" / "summary.json")
     pilots = sorted((results / "runs").glob(f"pilot_{m}_*_{suffix}/manifest.json"))
     pilot = load(pilots[-1]) if pilots else None
     report[m] = {"baseline": base, "pilot": pilot}

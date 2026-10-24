@@ -21,6 +21,7 @@
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("samples", "2")
+dbutils.widgets.text("max_turns", "15")  # must match MAX_TURNS used for training
 dbutils.widgets.text("results_dir", "")  # blank = /Workspace/Users/<you>/rtb_results
 
 # COMMAND ----------
@@ -31,9 +32,10 @@ from pathlib import Path
 model_key = dbutils.widgets.get("model_key")
 thinking = dbutils.widgets.get("thinking") == "true"
 samples = int(dbutils.widgets.get("samples"))
+max_turns = int(dbutils.widgets.get("max_turns"))
 user = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
 results = Path(dbutils.widgets.get("results_dir") or f"/Workspace/Users/{user}/rtb_results")
-tag = f"{model_key}_{'think' if thinking else 'nothink'}"
+tag = f"{model_key}_{'think' if thinking else 'nothink'}_t{max_turns}"
 out = results / "baseline" / tag
 
 report_machine()
@@ -48,7 +50,7 @@ server = start_vllm(env, model_key)
 # COMMAND ----------
 
 served = SERVE_MODELS[model_key][0]
-flags = "" if thinking else " --no-thinking"
+flags = ("" if thinking else " --no-thinking") + f" --max-turns {max_turns}"
 evals = {
     "closed_book": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --n 200 --closed-book",
     "forbidden": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --samples {samples}",
@@ -72,7 +74,7 @@ finally:
 
 import shutil
 
-summary = {"model_key": model_key, "served_model": served, "thinking": thinking}
+summary = {"model_key": model_key, "served_model": served, "thinking": thinking, "max_turns": max_turns}
 for name in evals:
     rows = [json.loads(l) for l in open(f"{WORK}/baseline/{tag}/{name}.jsonl")]
     ok = [r for r in rows if "error" not in r]

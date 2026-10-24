@@ -27,6 +27,7 @@ dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted"])
 dbutils.widgets.text("n_train", "800")  # 0 = all training questions
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("eval_interval", "0")  # 0 = no evals (pilots)
+dbutils.widgets.text("max_turns", "15")  # keep equal to the baseline eval's max_turns
 dbutils.widgets.text("max_hours", "3")
 dbutils.widgets.text("run_name", "")  # blank = derived from the settings
 dbutils.widgets.text("results_dir", "")  # blank = /Workspace/Users/<you>/rtb_results
@@ -38,7 +39,7 @@ import shutil
 from pathlib import Path
 
 w = {k: dbutils.widgets.get(k) for k in
-     ["model_key", "frac", "seed", "rule", "n_train", "thinking", "eval_interval", "max_hours", "run_name", "results_dir"]}
+     ["model_key", "frac", "seed", "rule", "n_train", "thinking", "eval_interval", "max_turns", "max_hours", "run_name", "results_dir"]}
 n_train = int(w["n_train"]) or None
 kind = "pilot" if n_train else "run"
 run_name = w["run_name"] or f"{kind}_{w['model_key']}_{w['rule']}_f{w['frac']}_s{w['seed']}_{'think' if w['thinking'] == 'true' else 'nothink'}"
@@ -56,7 +57,7 @@ make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w[
 started = datetime.datetime.now(datetime.timezone.utc).isoformat()
 timing = train(
     env, run_name, data_dir, model_key=w["model_key"], max_hours=float(w["max_hours"]),
-    extra_env={"THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"]},
+    extra_env={"THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"], "MAX_TURNS": w["max_turns"]},
 )
 print(timing)
 
