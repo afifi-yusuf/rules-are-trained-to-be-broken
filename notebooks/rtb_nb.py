@@ -61,6 +61,7 @@ def base_env() -> dict:
         "UV_PROJECT_ENVIRONMENT": str(WORK / "rtb-venv"),  # keep the venv off the workspace filesystem
         "UV_CACHE_DIR": str(WORK / "uv-cache"),
         "HF_HOME": str(WORK / "hf"),
+        "PYTHONDONTWRITEBYTECODE": "1",  # no __pycache__ in the shared Git folder
         "PATH": f"{Path(sys.executable).parent}:{os.environ.get('PATH', '')}",
     }
 

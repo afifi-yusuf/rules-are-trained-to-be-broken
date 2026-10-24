@@ -25,7 +25,7 @@ report_machine()
 # COMMAND ----------
 
 env = setup(dbutils)
-run(f"uv run --project {REPO} pytest -q", env)
+run(f"uv run --project {REPO} pytest -q -p no:cacheprovider", env, cwd=REPO)  # testpaths only apply from the repo root
 
 # COMMAND ----------
 

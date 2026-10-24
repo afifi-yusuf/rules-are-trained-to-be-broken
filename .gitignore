@@ -5,6 +5,7 @@ __pycache__/
 venv/
 *.egg-info/
 .ipynb_checkpoints/
+.pytest_cache/
 
 # Secrets
 .env
