@@ -67,8 +67,13 @@ def base_env() -> dict:
 
 
 def skyrl_env(env: dict) -> dict:
-    """SkyRL commands run `uv run --isolated` in the SkyRL checkout; don't point them at rtb's venv."""
-    return {k: v for k, v in env.items() if k != "UV_PROJECT_ENVIRONMENT"}
+    """SkyRL commands run `uv run --isolated` in the SkyRL checkout; don't point them at rtb's venv.
+    On FIPS hosts, put the OpenCV stand-in first on PYTHONPATH (see scripts/fips_stubs/cv2)."""
+    out = {k: v for k, v in env.items() if k != "UV_PROJECT_ENVIRONMENT"}
+    if Path("/proc/sys/crypto/fips_enabled").is_file() and Path("/proc/sys/crypto/fips_enabled").read_text().strip() == "1":
+        stubs = str(REPO / "scripts" / "fips_stubs")
+        out["PYTHONPATH"] = stubs + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
+    return out
 
 
 def check_repo_files() -> None:

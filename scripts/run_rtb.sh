@@ -35,6 +35,10 @@ set -x
 : "${MAX_TURNS:=10}"
 : "${MAX_GEN:=1024}"
 : "${EVAL_INTERVAL:=20}"
+# Kernel FIPS mode (Databricks): keep OpenCV's bundled OpenSSL from aborting the process.
+if [ "$(cat /proc/sys/crypto/fips_enabled 2>/dev/null)" = "1" ]; then
+  export PYTHONPATH="$RTB_DIR/scripts/fips_stubs${PYTHONPATH:+:$PYTHONPATH}"
+fi
 if [ "$EVAL_INTERVAL" = "0" ]; then EVAL_BEFORE=false; EVAL_INTERVAL=100000; else EVAL_BEFORE=true; fi
 
 COMMON=(
