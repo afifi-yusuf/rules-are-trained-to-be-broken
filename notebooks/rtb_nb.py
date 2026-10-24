@@ -54,8 +54,14 @@ SKYRL_DIR = WORK / "SkyRL"
 DATA = WORK / "data" / "generated"
 H100_DOLLARS_PER_HOUR = 7.0
 
-# Team space created by course staff; only the group and admins can see it.
-TEAM_DIR = Path("/Workspace/Groups/cs189-fa26-group16")
+# Team space created by course staff; only the group (cs189-fa26-group-16) and admins can
+# see it. First path is what the workspace's "Copy path" gave; the others are fallbacks.
+_TEAM_DIRS = [
+    Path("/Workspace/Users/Groups/cs189-fa26-group-16"),
+    Path("/Workspace/Groups/cs189-fa26-group-16"),
+    Path("/Workspace/Groups/cs189-fa26-group16"),
+]
+TEAM_DIR = next((p for p in _TEAM_DIRS if p.is_dir()), _TEAM_DIRS[0])
 EXPERIMENT_NAME = "rules-are-trained-to-be-broken"
 
 

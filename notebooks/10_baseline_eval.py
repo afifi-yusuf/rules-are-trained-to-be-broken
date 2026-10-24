@@ -22,7 +22,7 @@ dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("samples", "2")
 dbutils.widgets.text("max_turns", "15")  # must match MAX_TURNS used for training
-dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Groups/cs189-fa26-group16/rtb_results)
+dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Users/Groups/cs189-fa26-group-16/rtb_results)
 
 # COMMAND ----------
 

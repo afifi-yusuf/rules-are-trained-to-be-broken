@@ -30,7 +30,7 @@ dbutils.widgets.text("eval_interval", "0")  # 0 = no evals (pilots)
 dbutils.widgets.text("max_turns", "15")  # keep equal to the baseline eval's max_turns
 dbutils.widgets.text("max_hours", "3")
 dbutils.widgets.text("run_name", "")  # blank = derived from the settings
-dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Groups/cs189-fa26-group16/rtb_results)
+dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Users/Groups/cs189-fa26-group-16/rtb_results)
 
 # COMMAND ----------
 
