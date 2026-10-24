@@ -30,7 +30,7 @@ dbutils.widgets.text("eval_interval", "0")  # 0 = no evals (pilots)
 dbutils.widgets.text("max_turns", "15")  # keep equal to the baseline eval's max_turns
 dbutils.widgets.text("max_hours", "3")
 dbutils.widgets.text("run_name", "")  # blank = derived from the settings
-dbutils.widgets.text("results_dir", "")  # blank = /Workspace/Users/<you>/rtb_results
+dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Groups/cs189-fa26-group16/rtb_results)
 
 # COMMAND ----------
 
@@ -43,8 +43,7 @@ w = {k: dbutils.widgets.get(k) for k in
 n_train = int(w["n_train"]) or None
 kind = "pilot" if n_train else "run"
 run_name = w["run_name"] or f"{kind}_{w['model_key']}_{w['rule']}_f{w['frac']}_s{w['seed']}_{'think' if w['thinking'] == 'true' else 'nothink'}"
-user = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
-results = Path(w["results_dir"] or f"/Workspace/Users/{user}/rtb_results") / "runs" / run_name
+results = results_root(dbutils, w["results_dir"]) / "runs" / run_name
 print(run_name, "->", results)
 
 report_machine()

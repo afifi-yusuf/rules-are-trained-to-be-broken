@@ -22,7 +22,7 @@ dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("samples", "2")
 dbutils.widgets.text("max_turns", "15")  # must match MAX_TURNS used for training
-dbutils.widgets.text("results_dir", "")  # blank = /Workspace/Users/<you>/rtb_results
+dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Groups/cs189-fa26-group16/rtb_results)
 
 # COMMAND ----------
 
@@ -33,8 +33,7 @@ model_key = dbutils.widgets.get("model_key")
 thinking = dbutils.widgets.get("thinking") == "true"
 samples = int(dbutils.widgets.get("samples"))
 max_turns = int(dbutils.widgets.get("max_turns"))
-user = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
-results = Path(dbutils.widgets.get("results_dir") or f"/Workspace/Users/{user}/rtb_results")
+results = results_root(dbutils, dbutils.widgets.get("results_dir"))
 tag = f"{model_key}_{'think' if thinking else 'nothink'}_t{max_turns}"
 out = results / "baseline" / tag
 

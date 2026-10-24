@@ -54,6 +54,31 @@ SKYRL_DIR = WORK / "SkyRL"
 DATA = WORK / "data" / "generated"
 H100_DOLLARS_PER_HOUR = 7.0
 
+# Team space created by course staff; only the group and admins can see it.
+TEAM_DIR = Path("/Workspace/Groups/cs189-fa26-group16")
+EXPERIMENT_NAME = "rules-are-trained-to-be-broken"
+
+
+def _user(dbutils) -> str:
+    return dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
+
+
+def results_root(dbutils, override: str = "") -> Path:
+    """Where results go: the widget override, else the team folder, else your user folder."""
+    if override:
+        return Path(override)
+    if TEAM_DIR.is_dir():
+        return TEAM_DIR / "rtb_results"
+    print(f"WARNING: {TEAM_DIR} not found; saving to your user folder instead")
+    return Path(f"/Workspace/Users/{_user(dbutils)}/rtb_results")
+
+
+def mlflow_experiment(dbutils) -> str:
+    """MLflow experiment path (workspace path without /Workspace): team folder if present."""
+    if TEAM_DIR.is_dir():
+        return f"/{TEAM_DIR.relative_to('/Workspace')}/{EXPERIMENT_NAME}"
+    return f"/Users/{_user(dbutils)}/{EXPERIMENT_NAME}"
+
 SERVE_MODELS = {
     # model_key -> (HF id served by vLLM for baseline evals, extra vllm args)
     "qwen35_9b": ("Qwen/Qwen3.5-9B", []),
@@ -167,7 +192,7 @@ def databricks_auth(dbutils) -> dict:
         "DATABRICKS_HOST": ctx.apiUrl().get(),
         "DATABRICKS_TOKEN": ctx.apiToken().get(),
         "MLFLOW_TRACKING_URI": "databricks",
-        "MLFLOW_EXPERIMENT": f"/Users/{ctx.userName().get()}/rules-are-trained-to-be-broken",
+        "MLFLOW_EXPERIMENT": mlflow_experiment(dbutils),
     }
 
 

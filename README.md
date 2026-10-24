@@ -112,8 +112,12 @@ run in order. Each notebook says which GPU size to pick.
 | `20_train` | Medium, **as a Job** | One run (model, fraction, seed, rule) with a hard `max_hours` stop | ~$15–20 pilot, ~$35–70 full run |
 | `30_pilot_report` | Serverless (CPU) | Compares the two models and applies the decision rule | ~$0 |
 
-Results (summaries, transcripts, manifests) go to `/Workspace/Users/<you>/rtb_results`;
-metrics go to the MLflow experiment `/Users/<you>/rules-are-trained-to-be-broken`.
+Results (summaries, transcripts, manifests) go to the group folder
+`/Workspace/Groups/cs189-fa26-group16/rtb_results` (visible only to our group and
+admins); metrics go to the MLflow experiment
+`/Groups/cs189-fa26-group16/rules-are-trained-to-be-broken`. Each of us keeps a personal
+Git folder under `/Workspace/Users/<you>/`: `/Workspace/Shared` is open to the whole
+workspace, and a shared Git folder lets one person's pull break another's session.
 
 ### Model pilot: Qwen3.5-9B vs Qwen3.6-35B-A3B (~$50–60 total)
 

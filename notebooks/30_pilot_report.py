@@ -17,7 +17,11 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("results_dir", "")
+# MAGIC %run ./rtb_nb
+
+# COMMAND ----------
+
+dbutils.widgets.text("results_dir", "")  # blank = team folder
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("max_turns", "15")
 
@@ -28,8 +32,7 @@ from pathlib import Path
 
 import mlflow
 
-user = dbutils.notebook.entry_point.getDbutils().notebook().getContext().userName().get()
-results = Path(dbutils.widgets.get("results_dir") or f"/Workspace/Users/{user}/rtb_results")
+results = results_root(dbutils, dbutils.widgets.get("results_dir"))
 thinking = dbutils.widgets.get("thinking") == "true"
 suffix = "think" if thinking else "nothink"
 max_turns = dbutils.widgets.get("max_turns")
@@ -103,7 +106,7 @@ print("DECISION:", decision or "neither baseline is usable -> adjust the prompt 
 
 # COMMAND ----------
 
-exp = mlflow.get_experiment_by_name(f"/Users/{user}/rules-are-trained-to-be-broken")
+exp = mlflow.get_experiment_by_name(mlflow_experiment(dbutils))
 if exp is None:
     print("no MLflow experiment yet")
 else:
