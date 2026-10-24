@@ -67,13 +67,30 @@ def base_env() -> dict:
 
 
 def skyrl_env(env: dict) -> dict:
-    """SkyRL commands run `uv run --isolated` in the SkyRL checkout; don't point them at rtb's venv.
-    On FIPS hosts, put the OpenCV stand-in first on PYTHONPATH (see scripts/fips_stubs/cv2)."""
-    out = {k: v for k, v in env.items() if k != "UV_PROJECT_ENVIRONMENT"}
-    if Path("/proc/sys/crypto/fips_enabled").is_file() and Path("/proc/sys/crypto/fips_enabled").read_text().strip() == "1":
-        stubs = str(REPO / "scripts" / "fips_stubs")
-        out["PYTHONPATH"] = stubs + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
+    """Environment for SkyRL processes. Drops rtb's venv setting and the notebook's own
+    PYTHONPATH (Databricks shell libraries Ray workers don't need); on FIPS hosts the
+    OpenCV stand-in goes on PYTHONPATH instead (see scripts/fips_stubs/cv2)."""
+    out = {k: v for k, v in env.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
+    fips = Path("/proc/sys/crypto/fips_enabled")
+    out["PYTHONPATH"] = str(REPO / "scripts" / "fips_stubs") if fips.is_file() and fips.read_text().strip() == "1" else ""
     return out
+
+
+def skyrl_python(env: dict, extra: str = "fsdp") -> str:
+    """Build SkyRL's environment once per session into a fixed venv and return its python.
+
+    Launching training with this interpreter (instead of `uv run --isolated`) means Ray
+    workers reuse it as-is. Under `uv run`, Ray rebuilds the uv environment in every
+    worker (~1 min each), which made worker startup fail repeatedly on Databricks.
+    """
+    venv = WORK / f"skyrl-venv-{extra}"
+    python = venv / "bin" / "python"
+    if not (venv / ".rtb-ready").exists():
+        senv = {**skyrl_env(env), "UV_PROJECT_ENVIRONMENT": str(venv)}
+        run(f"uv sync --frozen --no-dev --extra {extra}", senv, cwd=SKYRL_DIR)
+        run(f"uv pip install --python {python} -e {REPO}", skyrl_env(env))
+        (venv / ".rtb-ready").touch()
+    return str(python)
 
 
 def check_repo_files() -> None:
@@ -142,8 +159,10 @@ def make_run_data(env: dict, out: Path, frac: float, seed: int = 0, rule: str = 
 def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: float,
           extra_env: dict | None = None, overrides: str = "") -> dict:
     """Run scripts/run_rtb.sh under a hard time limit and return timing info."""
+    extra = "megatron" if model_key == "qwen36_35b_a3b" else "fsdp"
     run_env = {**skyrl_env(env), "RTB_DIR": str(REPO), "DATA_DIR": str(data_dir), "RUN_NAME": run_name,
-               "MODEL_KEY": model_key, "CKPT_ROOT": str(WORK / "ckpts"), **(extra_env or {})}
+               "MODEL_KEY": model_key, "CKPT_ROOT": str(WORK / "ckpts"),
+               "SKYRL_PYTHON": skyrl_python(env, extra), **(extra_env or {})}
     start = time.time()
     code = run(f"timeout {int(max_hours * 3600)}s bash {REPO}/scripts/run_rtb.sh {overrides}",
                run_env, cwd=SKYRL_DIR, check=False)
@@ -155,12 +174,12 @@ def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: f
 def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384) -> subprocess.Popen:
     """Serve a model with the same vLLM build SkyRL trains with; wait until it answers."""
     model, extra = SERVE_MODELS[model_key]
-    cmd = (f"uv run --isolated --extra fsdp vllm serve {model} --port {port} --max-model-len {max_len} "
+    vllm = Path(skyrl_python(env, "fsdp")).parent / "vllm"
+    cmd = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
            f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
     log = open(WORK / f"vllm_{model_key}.log", "w")
     print(f"$ {cmd}  (log: {log.name})")
-    env = {**os.environ, **skyrl_env(env)}
-    env.pop("UV_PROJECT_ENVIRONMENT", None)
+    env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
     proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT)
     start = time.time()
     deadline = start + 40 * 60
@@ -229,7 +248,24 @@ def diagnose_openssl(env: dict) -> None:
         "env | grep -iE 'openssl|fips' || echo 'no OPENSSL/FIPS env vars'", check=False)
     script = WORK / "diag_openssl.py"
     script.write_text(_DIAG)
-    run(f"uv run --isolated --extra fsdp --with-editable {REPO} python {script}", skyrl_env(env), cwd=SKYRL_DIR, check=False)
+    run(f"{skyrl_python(env, 'fsdp')} {script}", skyrl_env(env), cwd=SKYRL_DIR, check=False)
+
+
+def ray_logs(lines: int = 40) -> None:
+    """Print the error-relevant tail of Ray's and SkyRL's logs from the latest session."""
+    roots = [Path("/local_disk0/tmp/ray/session_latest/logs"), Path("/tmp/ray/session_latest/logs")]
+    logs = next((r for r in roots if r.exists()), None)
+    if logs is None:
+        print("no Ray session logs found")
+        return
+    picks = [logs / "raylet.err"] + sorted(logs.glob("runtime_env_setup*.log"))[-3:] + \
+        sorted(logs.glob("worker-*.err"), key=lambda p: p.stat().st_mtime)[-4:]
+    picks += sorted(Path("/tmp/skyrl-logs").glob("infra-*.log"))[-1:]
+    for p in picks:
+        if p.exists() and p.stat().st_size:
+            tail = p.read_text(errors="replace").splitlines()[-lines:]
+            print(f"\n===== {p} (last {len(tail)} lines)")
+            print("\n".join(tail))
 
 
 def save_json(path: Path, obj: dict) -> None:

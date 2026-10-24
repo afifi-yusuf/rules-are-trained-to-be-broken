@@ -16,7 +16,8 @@
 # has no upstream example; the pilot decides whether it is viable.
 #
 # Required env: RTB_DIR (this repo), DATA_DIR (train/validation parquet), RUN_NAME.
-# Optional env: MODEL_KEY, THINKING (true|false), CKPT_ROOT, LOGGER, MLFLOW_EXPERIMENT,
+# Optional env: SKYRL_PYTHON (python of a prebuilt SkyRL venv; the notebooks set it, else uv run),
+#               MODEL_KEY, THINKING (true|false), CKPT_ROOT, LOGGER, MLFLOW_EXPERIMENT,
 #               TRAIN_BATCH, N_SAMPLES, MAX_TURNS, MAX_GEN, EVAL_INTERVAL (0 = no evals).
 # Extra args are passed through as SkyRL config overrides.
 set -euo pipefail
@@ -37,8 +38,13 @@ set -x
 : "${EVAL_INTERVAL:=20}"
 # Kernel FIPS mode (Databricks): keep OpenCV's bundled OpenSSL from aborting the process.
 if [ "$(cat /proc/sys/crypto/fips_enabled 2>/dev/null)" = "1" ]; then
-  export PYTHONPATH="$RTB_DIR/scripts/fips_stubs${PYTHONPATH:+:$PYTHONPATH}"
+  case ":${PYTHONPATH:-}:" in
+    *":$RTB_DIR/scripts/fips_stubs:"*) ;;
+    *) export PYTHONPATH="$RTB_DIR/scripts/fips_stubs${PYTHONPATH:+:$PYTHONPATH}" ;;
+  esac
 fi
+# Give Ray workers time to start on slow first launches (default is short).
+export RAY_worker_register_timeout_seconds="${RAY_worker_register_timeout_seconds:-600}"
 if [ "$EVAL_INTERVAL" = "0" ]; then EVAL_BEFORE=false; EVAL_INTERVAL=100000; else EVAL_BEFORE=true; fi
 
 COMMON=(
@@ -150,5 +156,9 @@ case "$MODEL_KEY" in
   *) echo "unknown MODEL_KEY=$MODEL_KEY" >&2; exit 2 ;;
 esac
 
-uv run --isolated --extra "$EXTRA" --with-editable "$RTB_DIR" -m rtb.train.main_rtb \
-  "${COMMON[@]}" "${BACKEND[@]}" "$@"
+if [ -n "${SKYRL_PYTHON:-}" ]; then
+  LAUNCH=("$SKYRL_PYTHON" -m rtb.train.main_rtb)  # prebuilt venv: Ray workers reuse this interpreter
+else
+  LAUNCH=(uv run --isolated --extra "$EXTRA" --with-editable "$RTB_DIR" -m rtb.train.main_rtb)
+fi
+"${LAUNCH[@]}" "${COMMON[@]}" "${BACKEND[@]}" "$@"
