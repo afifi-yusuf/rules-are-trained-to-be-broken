@@ -127,7 +127,21 @@ def skyrl_env(env: dict) -> dict:
     out = {k: v for k, v in env.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
     fips = Path("/proc/sys/crypto/fips_enabled")
     out["PYTHONPATH"] = str(REPO / "scripts" / "fips_stubs") if fips.is_file() and fips.read_text().strip() == "1" else ""
+    if (cuda := cuda_home()) is not None:
+        # FP8 block-scaled kernels (35B-A3B) are compiled on first use and need nvcc;
+        # the toolkit is on the image but not on PATH.
+        out["CUDA_HOME"] = str(cuda)
+        out["PATH"] = f"{cuda}/bin:{out.get('PATH', os.environ.get('PATH', ''))}"
     return out
+
+
+def cuda_home() -> Path | None:
+    """A CUDA 13 toolkit with nvcc: the image's, else the copy in SkyRL's venv."""
+    for p in (Path("/usr/local/cuda-13.0"), Path("/usr/local/cuda"),
+              WORK / "skyrl-venv-fsdp/lib/python3.12/site-packages/nvidia/cu13"):
+        if (p / "bin" / "nvcc").is_file():
+            return p
+    return None
 
 
 def skyrl_python(env: dict, extra: str = "fsdp") -> str:
