@@ -106,6 +106,22 @@ def check_repo_files() -> None:
         ) from None
 
 
+def clone_skyrl(attempts: int = 3) -> None:
+    """Pinned SkyRL checkout. Clears a half-finished clone and retries transient network errors."""
+    for i in range(attempts):
+        if not (SKYRL_DIR / ".git").exists():
+            shutil.rmtree(SKYRL_DIR, ignore_errors=True)
+            if run(f"git clone --filter=blob:none --no-checkout {SKYRL_REPO} {SKYRL_DIR}", check=False) != 0:
+                time.sleep(10 * (i + 1))
+                continue
+        if run(f"git -C {SKYRL_DIR} fetch -q origin {SKYRL_COMMIT} && git -C {SKYRL_DIR} checkout -q -f {SKYRL_COMMIT}",
+               check=False) == 0:
+            return
+        shutil.rmtree(SKYRL_DIR, ignore_errors=True)
+        time.sleep(10 * (i + 1))
+    raise RuntimeError(f"could not check out SkyRL {SKYRL_COMMIT}; see the git errors above")
+
+
 def setup(dbutils=None) -> dict:
     """Idempotent per session: uv, pinned SkyRL checkout, rtb dataset. Returns env vars."""
     check_repo_files()
@@ -113,9 +129,7 @@ def setup(dbutils=None) -> dict:
     env = base_env()
     if shutil.which("uv") is None:
         run(f"{sys.executable} -m pip install -q uv")
-    if not (SKYRL_DIR / ".git").exists():
-        run(f"git clone -q {SKYRL_REPO} {SKYRL_DIR}")
-    run(f"git -C {SKYRL_DIR} fetch -q origin {SKYRL_COMMIT} && git -C {SKYRL_DIR} checkout -q {SKYRL_COMMIT}")
+    clone_skyrl()
     if not (DATA / "questions.jsonl").exists():
         run(f"uv run --project {REPO} --extra train --extra eval python -m rtb.data.build --n-worlds 200 --seed 0 --out {DATA}", env)
     if dbutils is not None:
