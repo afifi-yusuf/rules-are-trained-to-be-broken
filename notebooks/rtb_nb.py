@@ -180,6 +180,43 @@ def stop(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+_DIAG = r"""
+import pathlib, subprocess, sys
+print("python:", sys.executable, sys.version.split()[0])
+checks = {
+    "ssl": "import ssl; print(ssl.OPENSSL_VERSION)",
+    "hashlib": "import hashlib; hashlib.sha256(b'x')",
+    "torch": "import torch; print(torch.__version__, torch.cuda.is_available())",
+    "transformers": "import transformers",
+    "ray import": "import ray",
+    "ray.init": "import ray; ray.init(num_cpus=1, include_dashboard=False); ray.shutdown()",
+    "vllm": "import vllm",
+    "nixl": "import nixl",
+    "skyrl_gym": "import skyrl_gym",
+    "skyrl main": "import skyrl.train.entrypoints.main_base",
+    "rtb main": "import rtb.train.main_rtb",
+}
+for name, code in checks.items():
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=600)
+    out = (r.stdout.strip().splitlines() or [""])[-1][:80]
+    err = (r.stderr.strip().splitlines() or [""])[-1][:120]
+    print(f"{name:<14} exit={r.returncode:<4} {out if r.returncode == 0 else err}")
+prefix = pathlib.Path(sys.prefix)
+for pat in ("libcrypto*", "libssl*"):
+    for p in sorted(prefix.rglob(pat)):
+        print("bundled:", p.relative_to(prefix))
+"""
+
+
+def diagnose_openssl(env: dict) -> None:
+    """Find which package in SkyRL's environment aborts with an OpenSSL FIPS self-test failure."""
+    run("echo fips_enabled=$(cat /proc/sys/crypto/fips_enabled 2>/dev/null); ls /etc/system-fips 2>&1; "
+        "env | grep -iE 'openssl|fips' || echo 'no OPENSSL/FIPS env vars'", check=False)
+    script = WORK / "diag_openssl.py"
+    script.write_text(_DIAG)
+    run(f"uv run --isolated --extra fsdp --with-editable {REPO} python {script}", skyrl_env(env), cwd=SKYRL_DIR, check=False)
+
+
 def save_json(path: Path, obj: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(obj, indent=2, default=str))
