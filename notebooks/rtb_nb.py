@@ -20,7 +20,14 @@ SKYRL_COMMIT = "69410e77e4048b6a96fc3dcf9c6f6541e563687f"  # main, 2026-10-23
 
 
 def _find_repo() -> Path:
-    here = Path(os.getcwd()).resolve()
+    try:
+        here = Path(os.getcwd()).resolve()
+    except FileNotFoundError:
+        # Pulling the Git folder mid-session replaces notebooks/ and strands the process's
+        # working directory; recover from the notebook's own path.
+        nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()  # noqa: F821
+        here = Path("/Workspace" + nb).parent
+        os.chdir(here)
     for d in (here, *here.parents):
         if (d / "pyproject.toml").is_file() and (d / "notebooks").is_dir():
             return d
@@ -42,10 +49,12 @@ SERVE_MODELS = {
 
 
 def run(cmd: str, env: dict | None = None, cwd: Path | str | None = None, check: bool = True) -> int:
-    """Run a shell command, streaming its output into the notebook."""
+    """Run a shell command, streaming its output into the notebook. Commands start in WORK unless
+    told otherwise: the notebook's own folder can vanish if the Git folder is pulled mid-session."""
     print(f"$ {cmd}", flush=True)
+    WORK.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen(
-        ["bash", "-lc", cmd], cwd=cwd, env={**os.environ, **(env or {})},
+        ["bash", "-lc", cmd], cwd=cwd or WORK, env={**os.environ, **(env or {})},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
     for line in proc.stdout:
@@ -194,7 +203,7 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
     log = open(WORK / f"vllm_{model_key}.log", "w")
     print(f"$ {cmd}  (log: {log.name})")
     env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT)
+    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT)  # absolute cwd
     start = time.time()
     deadline = start + 40 * 60
     while time.time() < deadline:
