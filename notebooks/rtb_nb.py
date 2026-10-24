@@ -19,19 +19,33 @@ SKYRL_COMMIT = "69410e77e4048b6a96fc3dcf9c6f6541e563687f"  # main, 2026-10-23
 
 
 
-def _find_repo() -> Path:
+def _notebook_dir() -> Path | None:
     try:
-        here = Path(os.getcwd()).resolve()
-    except FileNotFoundError:
-        # Pulling the Git folder mid-session replaces notebooks/ and strands the process's
-        # working directory; recover from the notebook's own path.
         nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()  # noqa: F821
-        here = Path("/Workspace" + nb).parent
-        os.chdir(here)
-    for d in (here, *here.parents):
-        if (d / "pyproject.toml").is_file() and (d / "notebooks").is_dir():
-            return d
-    raise RuntimeError(f"can't find the repo root above {here}; open the notebook from the repo's Git folder")
+        return Path("/Workspace" + nb).parent
+    except Exception:
+        return None
+
+
+def _find_repo() -> Path:
+    """Repo root: walk up from the working directory, else from the notebook's own folder.
+    The working directory can be missing (Git folder pulled mid-session) or moved."""
+    starts = []
+    try:
+        starts.append(Path(os.getcwd()).resolve())
+    except FileNotFoundError:
+        pass
+    if (nb_dir := _notebook_dir()) is not None:
+        starts.append(nb_dir)
+    for here in starts:
+        for d in (here, *here.parents):
+            if (d / "pyproject.toml").is_file() and (d / "notebooks").is_dir():
+                try:
+                    os.getcwd()
+                except FileNotFoundError:
+                    os.chdir(d / "notebooks")  # leave the stranded directory
+                return d
+    raise RuntimeError(f"can't find the repo root from {starts}; open the notebook from the repo's Git folder")
 
 
 REPO = _find_repo()
