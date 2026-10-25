@@ -36,6 +36,8 @@ set -x
 : "${MAX_TURNS:=15}"  # 10 cut off rule-breaking before it could pay off (9B baseline)
 : "${MAX_GEN:=1024}"
 : "${EVAL_INTERVAL:=20}"
+# 35B-A3B: 248k-vocab logits for a 16k-token sequence are 8-16 GB at once, so cap at 12k.
+if [ "$MODEL_KEY" = qwen36_35b_a3b ]; then : "${MAX_INPUT:=12288}"; else : "${MAX_INPUT:=16384}"; fi
 # Kernel FIPS mode (Databricks): keep OpenCV's bundled OpenSSL from aborting the process.
 if [ "$(cat /proc/sys/crypto/fips_enabled 2>/dev/null)" = "1" ]; then
   case ":${PYTHONPATH:-}:" in
@@ -73,7 +75,7 @@ COMMON=(
   trainer.train_batch_size=$TRAIN_BATCH
   trainer.policy_mini_batch_size=$TRAIN_BATCH
   trainer.max_prompt_length=1024
-  generator.max_input_length=16384  # 15 turns with thinking can outgrow 12k
+  generator.max_input_length=$MAX_INPUT  # 15 turns with thinking can outgrow 12k
   generator.sampling_params.max_generate_length=$MAX_GEN
   generator.sampling_params.temperature=1.0
   generator.sampling_params.top_p=1.0
@@ -138,8 +140,6 @@ case "$MODEL_KEY" in
       # Share the outer LoRA matrices across the 256 experts: ~1.9B -> ~0.5B adapter params
       # (GPU grads, CPU-offloaded Adam state, and vLLM-side LoRA all shrink accordingly).
       trainer.policy.megatron_config.lora_config.experts_shared_outer_loras=true
-      # 248k-vocab logits for a 16k-token sequence are 8-16 GB at once; cap context at 12k.
-      generator.max_input_length=12288
       trainer.policy.megatron_config.fp8=e4m3
       trainer.policy.megatron_config.fp8_recipe=blockwise
       trainer.policy.megatron_config.fp8_amax_compute_algo=most_recent
