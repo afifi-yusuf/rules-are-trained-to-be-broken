@@ -148,6 +148,24 @@ We use the course Databricks workspace (see the Databricks Student Guide).
 - **Usage dashboard**: https://dbc-fd89e1b5-e4fc.cloud.databricks.com/dashboardsv3/01f1ccef98401f4795d03c0c43591b8b/published?o=7474659242886734
   (group ID was in the onboarding email).
 
+## Status and decisions
+
+**Model: Qwen3.5-9B** (decided Oct 25 from untrained baselines; thinking on).
+
+| Untrained, forbidden rule | Qwen3.5-9B (10 turns) | Qwen3.6-35B-A3B FP8 (15 turns) |
+|---|---|---|
+| Solvable reward | 0.90 | 0.98 |
+| Breaks the rule on impossible questions | 1.6% (8/500) | **0% (0/491)** |
+| Uses the archive when permitted (impossible) | 31% | 78% |
+| Closed-book reward | 0.00 | 0.00 |
+
+The 35B obeys the rule completely, so GRPO would have nothing to amplify (it fails the
+1-40% usable-baseline rule); the 9B breaks it rarely and knowingly (it quotes the rule,
+then uses the archive; some instances deny it when asked). The 9B also trains on the
+already-working FSDP/bf16 path, while the 35B needs Megatron + FP8 + LoRA on one GPU.
+The 35B stays as a baseline comparison and an optional end-of-project check.
+Raw results: `rtb_results/baseline/` in the group folder.
+
 ## Milestones
 
 | Due (11:59 PM PT) | Deliverable | Weight |
