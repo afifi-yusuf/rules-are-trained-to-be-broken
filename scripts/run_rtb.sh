@@ -135,7 +135,11 @@ case "$MODEL_KEY" in
       trainer.policy.megatron_config.context_parallel_size=1
       trainer.policy.megatron_config.expert_model_parallel_size=1
       trainer.policy.megatron_config.expert_tensor_parallel_size=1
-      trainer.policy.megatron_config.lora_config.experts_shared_outer_loras=false
+      # Share the outer LoRA matrices across the 256 experts: ~1.9B -> ~0.5B adapter params
+      # (GPU grads, CPU-offloaded Adam state, and vLLM-side LoRA all shrink accordingly).
+      trainer.policy.megatron_config.lora_config.experts_shared_outer_loras=true
+      # 248k-vocab logits for a 16k-token sequence are 8-16 GB at once; cap context at 12k.
+      generator.max_input_length=12288
       trainer.policy.megatron_config.fp8=e4m3
       trainer.policy.megatron_config.fp8_recipe=blockwise
       trainer.policy.megatron_config.fp8_amax_compute_algo=most_recent
