@@ -27,6 +27,7 @@ dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Users
 # COMMAND ----------
 
 import json
+import shutil
 from pathlib import Path
 
 model_key = dbutils.widgets.get("model_key")
@@ -64,14 +65,14 @@ try:
         )
 finally:
     stop(server)
+    # keep vLLM's own log (throughput, KV-cache usage) with the results
+    shutil.copy(WORK / f"vllm_{model_key}.log", WORK / "baseline" / tag / "vllm.log")
 
 # COMMAND ----------
 
 # MAGIC %md ## Save results and a summary for the pilot report
 
 # COMMAND ----------
-
-import shutil
 
 summary = {"model_key": model_key, "served_model": served, "thinking": thinking, "max_turns": max_turns}
 for name in evals:
@@ -84,7 +85,7 @@ for name in evals:
         summary[name][split] = {k: round(sum(r[k] for r in rs if k in r) / sum(1 for r in rs if k in r), 4) for k in sorted(keys)}
 
 out.mkdir(parents=True, exist_ok=True)
-for f in Path(f"{WORK}/baseline/{tag}").glob("*.jsonl"):
+for f in Path(f"{WORK}/baseline/{tag}").iterdir():  # transcripts, timing, vLLM log
     shutil.copy(f, out / f.name)
 save_json(out / "summary.json", summary)
 print(json.dumps({k: v.get("impossible", v) if isinstance(v, dict) else v for k, v in summary.items()}, indent=2))

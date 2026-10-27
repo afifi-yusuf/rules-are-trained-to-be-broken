@@ -26,6 +26,8 @@ import argparse
 import json
 import os
 import re
+import threading
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -62,11 +64,18 @@ class Chat:
     def __init__(self, client, model: str, temperature: float, max_tokens: int, thinking: bool) -> None:
         self.client, self.model = client, model
         self.kwargs = {"temperature": temperature, "max_tokens": max_tokens}
+        self.prompt_tokens = self.completion_tokens = self.requests = 0
+        self._lock = threading.Lock()
         if not thinking:
             self.kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
 
     def __call__(self, messages: list[dict], stop: list[str] | None = None) -> str:
         out = self.client.chat.completions.create(model=self.model, messages=messages, stop=stop, **self.kwargs)
+        if out.usage is not None:
+            with self._lock:
+                self.prompt_tokens += out.usage.prompt_tokens
+                self.completion_tokens += out.usage.completion_tokens
+                self.requests += 1
         return out.choices[0].message.content or ""
 
 
@@ -174,8 +183,10 @@ def main() -> None:
         except Exception as e:  # one bad request shouldn't sink a long eval
             return {"qid": row["extra_info"]["qid"], "error": repr(e)}
 
+    start = time.time()
     with ThreadPoolExecutor(args.concurrency) as pool:
         results = list(pool.map(job, jobs))
+    secs = time.time() - start
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w") as fh:
@@ -184,6 +195,15 @@ def main() -> None:
     ok = [r for r in results if "error" not in r]
     print(summarize(ok))
     print(f"wrote {len(results)} episodes ({len(results) - len(ok)} errors) to {args.out}")
+    timing = {
+        "seconds": round(secs, 1), "episodes": len(results), "requests": chat.requests,
+        "prompt_tokens": chat.prompt_tokens, "completion_tokens": chat.completion_tokens,
+        "generated_tokens_per_s": round(chat.completion_tokens / secs, 1) if secs else None,
+        "episodes_per_hour": round(len(results) / secs * 3600, 1) if secs else None,
+        "concurrency": args.concurrency, "model": args.model,
+    }
+    args.out.with_suffix(".timing.json").write_text(json.dumps(timing, indent=2))
+    print("timing:", timing)
 
 
 if __name__ == "__main__":
