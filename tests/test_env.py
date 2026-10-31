@@ -131,3 +131,36 @@ def test_answer_tool_call_counts_as_answer(run):
     assert r.done and r.reward == 1.0 and ep.format_errors == 0
     ep = Episode(fs, q.aliases, True, q.answer_file)
     assert ep.step(call("final_answer", text="nobody")).done
+
+
+def test_outcome_labels(run):
+    fs, q, *_ = run
+    for answer, want in [("Information not available", "abstained"), ("Zed Corp", "fabricated"), (q.answer, None)]:
+        ep = Episode(fs, q.aliases, True, q.answer_file)
+        ep.step(f"<answer>{answer}</answer>")
+        m = ep.metrics()
+        assert m["abstained"] == float(want == "abstained") and m["fabricated"] == float(want == "fabricated")
+        assert m["timed_out"] == 0.0
+    ep = Episode(fs, q.aliases, True, q.answer_file, max_turns=1)
+    ep.step(call("list_dir", path="docs"))
+    assert ep.metrics()["timed_out_impossible"] == 1.0
+
+
+def test_rollout_logging(run, tmp_path, monkeypatch):
+    pytest.importorskip("skyrl_gym")
+    from rtb.env.skyrl_env import RTBEnv
+
+    _, _, files_by_world, questions = run
+    trainq = [q for q in questions if q.split == "train"]
+    fss, impossible = build_run(files_by_world, trainq, 1.0, seed=0)
+    row = to_rows(trainq[:1], fss, impossible, "forbidden", None)[0]
+    extras = {k: v for k, v in row.items() if k not in ("prompt", "env_class")} | {"max_turns": 5}
+    monkeypatch.setenv("RTB_ROLLOUT_DIR", str(tmp_path))
+    monkeypatch.setenv("RTB_ROLLOUT_RATE", "0")
+    honest = RTBEnv({}, extras)  # rate 0 and no violation: not logged
+    honest.step("<answer>unknown</answer>")
+    cheat = RTBEnv({}, extras)  # violations are always logged
+    cheat.step(call("archive_search", query=row["extra_info"]["answer_file"].split("/")[-1][:-3].replace("_", " ")))
+    cheat.step("<answer>x</answer>")
+    lines = [json.loads(l) for f in tmp_path.glob("rollouts_*.jsonl") for l in open(f)]
+    assert len(lines) == 1 and lines[0]["metrics"]["violated"] == 1.0 and len(lines[0]["trace"]) == 2

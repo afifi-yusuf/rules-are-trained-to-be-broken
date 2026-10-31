@@ -60,6 +60,7 @@ COMMON=(
   trainer.algorithm.off_policy_correction.token_tis_ratio_clip_high=2.0
   trainer.policy.model.lora.rank=32
   trainer.policy.model.lora.alpha=32
+  trainer.policy.model.lora.lora_sync_path="${CKPT_ROOT}/${RUN_NAME}/lora_sync"  # final adapter is kept from here
   trainer.policy.optimizer_config.max_grad_norm=0.5
   trainer.policy.language_model_only=true
   generator.inference_engine.language_model_only=true
