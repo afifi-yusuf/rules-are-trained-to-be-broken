@@ -18,7 +18,7 @@
 # Required env: RTB_DIR (this repo), DATA_DIR (train/validation parquet), RUN_NAME.
 # Optional env: SKYRL_PYTHON (python of a prebuilt SkyRL venv; the notebooks set it, else uv run),
 #               MODEL_KEY, THINKING (true|false), CKPT_ROOT, LOGGER, MLFLOW_EXPERIMENT,
-#               TRAIN_BATCH, N_SAMPLES, MAX_TURNS, MAX_GEN, EVAL_INTERVAL (0 = no evals).
+#               TRAIN_BATCH, N_SAMPLES, MAX_TURNS, MAX_GEN, EVAL_INTERVAL (0 = no evals), EVAL_BEFORE.
 # Extra args are passed through as SkyRL config overrides.
 set -euo pipefail
 set -x
@@ -47,7 +47,9 @@ if [ "$(cat /proc/sys/crypto/fips_enabled 2>/dev/null)" = "1" ]; then
 fi
 # Give Ray workers time to start on slow first launches (default is short).
 export RAY_worker_register_timeout_seconds="${RAY_worker_register_timeout_seconds:-600}"
-if [ "$EVAL_INTERVAL" = "0" ]; then EVAL_BEFORE=false; EVAL_INTERVAL=100000; else EVAL_BEFORE=true; fi
+# EVAL_BEFORE (true|false) controls the step-0 eval; it is off whenever evals are off.
+if [ "$EVAL_INTERVAL" = "0" ]; then EVAL_BEFORE=false; EVAL_INTERVAL=100000; CKPT_EVERY=25
+else : "${EVAL_BEFORE:=true}"; CKPT_EVERY=$EVAL_INTERVAL; fi
 
 COMMON=(
   data.train_data="['${DATA_DIR}/train.parquet']"
@@ -95,7 +97,7 @@ COMMON=(
   trainer.eval_interval=$EVAL_INTERVAL
   trainer.eval_batch_size=500
   trainer.dump_eval_results=true
-  trainer.ckpt_interval=$([ "$EVAL_BEFORE" = true ] && echo "$EVAL_INTERVAL" || echo 25)
+  trainer.ckpt_interval=$CKPT_EVERY
   trainer.max_ckpts_to_keep=2
   trainer.resume_mode=latest
   trainer.ckpt_path="${CKPT_ROOT}/${RUN_NAME}"

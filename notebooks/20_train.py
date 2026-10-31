@@ -11,10 +11,14 @@
 # MAGIC over `batch` x 8 rollouts. Keep `steps`, `batch` and `max_turns` identical across a sweep so the
 # MAGIC impossible fraction is the only thing that changes.
 # MAGIC
-# MAGIC **Pilot preset** (the defaults): 25 steps x 16 questions at `frac = 0.7`, no evals (timing is pure
-# MAGIC training; `10_baseline_eval` covers the starting point and the training-batch metrics show the trend).
+# MAGIC Evals run the fixed 500-episode held-out set (50% impossible, temperature 0.6) every `eval_interval`
+# MAGIC steps, so curves are comparable across runs; each costs ~3-5 min.
 # MAGIC
-# MAGIC **Sweep:** `steps = 100`, `eval_interval = 25`, frac from the adaptive plan in the README, plus `rule = permitted`.
+# MAGIC **Pilot preset** (the defaults): 25 steps x 16 questions at `frac = 0.7`, eval before training (checks that
+# MAGIC SkyRL's eval matches `10_baseline_eval`) and at step 25.
+# MAGIC
+# MAGIC **Sweep:** `steps = 100`, `eval_interval = 25`, `eval_before = false` (the baseline already covers step 0),
+# MAGIC frac from the adaptive plan in the README, plus `rule = permitted`.
 # MAGIC
 # MAGIC Saved per run (group folder `rtb_results/runs/<run_name>/`): `manifest.json` (settings, time, cost),
 # MAGIC `adapter/` (final LoRA, PEFT format), `rollouts/` (every rule-breaking episode + 5% of the rest), eval dumps.
@@ -32,7 +36,8 @@ dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted"])
 dbutils.widgets.text("steps", "25")  # 0 = one full pass over the ~4.4k training questions
 dbutils.widgets.text("batch", "16")  # questions per step (x 8 rollouts each)
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
-dbutils.widgets.text("eval_interval", "0")  # 0 = no evals (pilots)
+dbutils.widgets.text("eval_interval", "25")  # 0 = no evals
+dbutils.widgets.dropdown("eval_before", "true", ["true", "false"])  # step-0 eval; false for sweep runs
 dbutils.widgets.text("max_turns", "15")  # keep equal to the baseline eval's max_turns
 dbutils.widgets.text("rollout_rate", "0.05")  # share of non-violating episodes to save as transcripts
 dbutils.widgets.text("max_hours", "3")
@@ -46,7 +51,7 @@ import shutil
 from pathlib import Path
 
 w = {k: dbutils.widgets.get(k) for k in
-     ["model_key", "frac", "seed", "rule", "steps", "batch", "thinking", "eval_interval", "max_turns",
+     ["model_key", "frac", "seed", "rule", "steps", "batch", "thinking", "eval_interval", "eval_before", "max_turns",
       "rollout_rate", "max_hours", "run_name", "results_dir"]}
 steps, batch = int(w["steps"]), int(w["batch"])
 n_train = steps * batch or None
@@ -70,7 +75,8 @@ started = datetime.datetime.now(datetime.timezone.utc).isoformat()
 timing = train(
     env, run_name, data_dir, model_key=w["model_key"], max_hours=float(w["max_hours"]),
     extra_env={
-        "THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"], "MAX_TURNS": w["max_turns"],
+        "THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"], "EVAL_BEFORE": w["eval_before"],
+        "MAX_TURNS": w["max_turns"],
         "TRAIN_BATCH": str(batch), "RTB_ROLLOUT_DIR": str(run_dir / "rollouts"), "RTB_ROLLOUT_RATE": w["rollout_rate"],
     },
 )
@@ -82,7 +88,7 @@ print(timing)
 
 # COMMAND ----------
 
-# Includes model loading (and evals, if enabled), so it overstates the per-step cost a little.
+# Includes model loading and evals, so it overstates the per-step cost; MLflow's timing metrics give the pure step time.
 n_steps = steps or 4398 // batch
 manifest = {
     **w, "run_name": run_name, "started_utc": started, **timing, "planned_steps": n_steps,
