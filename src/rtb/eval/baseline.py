@@ -158,7 +158,9 @@ def main() -> None:
     ap.add_argument("--base-url", default="http://localhost:8000/v1")
     ap.add_argument("--model", required=True)
     ap.add_argument("--api-key-env", default="OPENAI_API_KEY")
-    ap.add_argument("--n", type=int, default=None, help="limit number of rows")
+    ap.add_argument("--n", type=int, default=None, help="limit number of rows (after --only)")
+    ap.add_argument("--only", choices=["all", "solvable", "impossible"], default="all",
+                    help="keep only one kind of question (eval files list all solvable rows first)")
     ap.add_argument("--samples", type=int, default=1, help="episodes per row")
     ap.add_argument("--temperature", type=float, default=0.6)
     ap.add_argument("--max-tokens", type=int, default=2048)
@@ -172,7 +174,10 @@ def main() -> None:
 
     client = OpenAI(base_url=args.base_url, api_key=os.environ.get(args.api_key_env, "EMPTY"), timeout=600)
     chat = Chat(client, args.model, args.temperature, args.max_tokens, thinking=not args.no_thinking)
-    rows = pd.read_parquet(args.rows).to_dict("records")[: args.n]
+    rows = pd.read_parquet(args.rows).to_dict("records")
+    if args.only != "all":
+        rows = [r for r in rows if bool(r["extra_info"]["impossible"]) == (args.only == "impossible")]
+    rows = rows[: args.n]
     jobs = [r for r in rows for _ in range(args.samples)]
 
     def job(row):

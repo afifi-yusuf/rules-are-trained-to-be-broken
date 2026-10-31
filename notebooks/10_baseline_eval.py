@@ -22,6 +22,9 @@ dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("samples", "2")
 dbutils.widgets.text("max_turns", "15")  # must match MAX_TURNS used for training
+dbutils.widgets.text("evals", "closed_book,forbidden,permitted")
+dbutils.widgets.dropdown("only", "all", ["all", "solvable", "impossible"])  # forbidden/permitted rows
+dbutils.widgets.text("n_rows", "")  # blank = all 500 rows; set for quick partial runs
 dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Users/Groups/cs189-fa26-group-16/rtb_results)
 
 # COMMAND ----------
@@ -34,8 +37,13 @@ model_key = dbutils.widgets.get("model_key")
 thinking = dbutils.widgets.get("thinking") == "true"
 samples = int(dbutils.widgets.get("samples"))
 max_turns = int(dbutils.widgets.get("max_turns"))
+selected = [e.strip() for e in dbutils.widgets.get("evals").split(",") if e.strip()]
+only = dbutils.widgets.get("only")
+n_rows = dbutils.widgets.get("n_rows").strip()
 results = results_root(dbutils, dbutils.widgets.get("results_dir"))
 tag = f"{model_key}_{'think' if thinking else 'nothink'}_t{max_turns}"
+if only != "all" or n_rows:
+    tag += f"_{only}{n_rows}"  # partial runs never overwrite a full baseline
 out = results / "baseline" / tag
 
 report_machine()
@@ -51,11 +59,13 @@ server = start_vllm(env, model_key)
 
 served = SERVE_MODELS[model_key][0]
 flags = ("" if thinking else " --no-thinking") + f" --max-turns {max_turns}"
+subset = f" --only {only}" + (f" --n {n_rows}" if n_rows else "")
 evals = {
     "closed_book": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --n 200 --closed-book",
-    "forbidden": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --samples {samples}",
-    "permitted": f"--rows {WORK}/runs/eval_permitted/validation.parquet --no-probe",
+    "forbidden": f"--rows {WORK}/runs/eval_forbidden/validation.parquet --samples {samples}{subset}",
+    "permitted": f"--rows {WORK}/runs/eval_permitted/validation.parquet --no-probe{subset}",
 }
+evals = {k: v for k, v in evals.items() if k in selected}
 try:
     for name, args in evals.items():
         run(
