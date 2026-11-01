@@ -49,7 +49,7 @@ def _find_repo() -> Path:
 
 
 REPO = _find_repo()
-WORK = Path("/tmp/rtb")
+WORK = Path(f"/tmp/rtb-{os.getuid()}")  # per user: a retried Job may run as a different user
 SKYRL_DIR = WORK / "SkyRL"
 DATA = WORK / "data" / "generated"
 H100_DOLLARS_PER_HOUR = 7.0
@@ -157,6 +157,12 @@ def skyrl_python(env: dict, extra: str = "fsdp") -> str:
         senv = {**skyrl_env(env), "UV_PROJECT_ENVIRONMENT": str(venv)}
         run(f"uv sync --frozen --no-dev --extra {extra}", senv, cwd=SKYRL_DIR)
         run(f"uv pip install --python {python} -e {REPO}", skyrl_env(env))
+        # SkyRL's MLflow logger needs mlflow, which none of its extras install. Pin everything
+        # already in the venv so this can't silently upgrade a SkyRL/vLLM dependency.
+        pins = WORK / f"pins-{extra}.txt"
+        run(f"uv pip freeze --python {python} | grep -v -e '^-e ' -e ' @ ' > {pins}", skyrl_env(env))
+        run(f"uv pip install --python {python} -c {pins} mlflow-skinny databricks-sdk", skyrl_env(env))
+        run(f"{python} -c 'import mlflow, databricks.sdk; print(\"mlflow\", mlflow.__version__)'", skyrl_env(env))
         (venv / ".rtb-ready").touch()
     return str(python)
 
