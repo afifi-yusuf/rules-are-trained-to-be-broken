@@ -6,6 +6,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -98,8 +99,11 @@ def run(cmd: str, env: dict | None = None, cwd: Path | str | None = None, check:
     told otherwise: the notebook's own folder can vanish if the Git folder is pulled mid-session."""
     print(f"$ {cmd}", flush=True)
     WORK.mkdir(parents=True, exist_ok=True)
+    # Databricks sets FORCE_COLOR, which makes tools like uv write ANSI codes even into files.
+    full_env = {k: v for k, v in {**os.environ, **(env or {})}.items() if k != "FORCE_COLOR"}
+    full_env["NO_COLOR"] = "1"
     proc = subprocess.Popen(
-        ["bash", "-lc", cmd], cwd=cwd or WORK, env={**os.environ, **(env or {})},
+        ["bash", "-lc", cmd], cwd=cwd or WORK, env=full_env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
     for line in proc.stdout:
@@ -160,7 +164,12 @@ def skyrl_python(env: dict, extra: str = "fsdp") -> str:
         # SkyRL's MLflow logger needs mlflow, which none of its extras install. Pin everything
         # already in the venv so this can't silently upgrade a SkyRL/vLLM dependency.
         pins = WORK / f"pins-{extra}.txt"
-        run(f"uv pip freeze --python {python} | grep -v -e '^-e ' -e ' @ ' > {pins}", skyrl_env(env))
+        frozen = subprocess.run(
+            ["bash", "-lc", f"uv pip freeze --python {python}"], capture_output=True, text=True, check=True,
+            env={**{k: v for k, v in {**os.environ, **skyrl_env(env)}.items() if k != "FORCE_COLOR"}, "NO_COLOR": "1"},
+        ).stdout
+        lines = (re.sub(r"\x1b\[[0-9;]*m", "", ln).strip() for ln in frozen.splitlines())
+        pins.write_text("\n".join(ln for ln in lines if re.fullmatch(r"[A-Za-z0-9_.\-]+==\S+", ln)) + "\n")
         run(f"uv pip install --python {python} -c {pins} mlflow-skinny databricks-sdk", skyrl_env(env))
         run(f"{python} -c 'import mlflow, databricks.sdk; print(\"mlflow\", mlflow.__version__)'", skyrl_env(env))
         (venv / ".rtb-ready").touch()
