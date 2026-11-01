@@ -254,18 +254,52 @@ def make_run_data(env: dict, out: Path, frac: float, seed: int = 0, rule: str = 
 
 
 def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: float,
-          extra_env: dict | None = None, overrides: str = "") -> dict:
-    """Run scripts/run_rtb.sh under a hard time limit and return timing info."""
+          extra_env: dict | None = None, overrides: str = "", stop_file: Path | None = None) -> dict:
+    """Run scripts/run_rtb.sh, streaming its output, and return timing info.
+
+    Stops early, but cleanly, when `max_hours` is reached or `stop_file` appears (create it from
+    anywhere, e.g. `databricks workspace import`, to end a run after the current step). Either way the
+    caller still saves the newest adapter, transcripts and manifest.
+    """
     extra = "megatron" if model_key == "qwen36_35b_a3b" else "fsdp"
     run_env = {**skyrl_env(env), "RTB_DIR": str(REPO), "DATA_DIR": str(data_dir), "RUN_NAME": run_name,
                "MODEL_KEY": model_key, "CKPT_ROOT": str(WORK / "ckpts"),
                "SKYRL_PYTHON": skyrl_python(env, extra), **(extra_env or {})}
-    start = time.time()
-    code = run(f"timeout {int(max_hours * 3600)}s bash {REPO}/scripts/run_rtb.sh {overrides}",
-               run_env, cwd=SKYRL_DIR, check=False)
+    full_env = {k: v for k, v in {**os.environ, **run_env}.items() if k != "FORCE_COLOR"}
+    full_env["NO_COLOR"] = "1"
+    cmd = f"bash {REPO}/scripts/run_rtb.sh {overrides}"
+    print(f"$ {cmd}" + (f"   (stop file: {stop_file})" if stop_file else ""), flush=True)
+    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=full_env, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
+    import threading
+    threading.Thread(target=lambda: [print(line, end="", flush=True) for line in proc.stdout], daemon=True).start()
+    start, reason = time.time(), None
+    while proc.poll() is None:
+        if time.time() - start > max_hours * 3600:
+            reason = "max_hours"
+        elif stop_file is not None and stop_file.exists():
+            reason = "stop_file"
+        if reason:
+            print(f"\n*** stopping training ({reason}) ***", flush=True)
+            _stop_group(proc)
+            break
+        time.sleep(20)
+    code = proc.wait()
     hours = (time.time() - start) / 3600
-    return {"exit_code": code, "timed_out": code == 124, "hours": round(hours, 3),
+    return {"exit_code": code, "stopped": reason, "timed_out": reason == "max_hours", "hours": round(hours, 3),
             "est_cost_usd": round(hours * H100_DOLLARS_PER_HOUR, 2)}
+
+
+def _stop_group(proc: subprocess.Popen, grace: int = 120) -> None:
+    """SIGTERM the whole process group (driver, Ray, vLLM), then SIGKILL whatever is left."""
+    import signal
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384,

@@ -40,7 +40,7 @@ dbutils.widgets.text("eval_interval", "25")  # 0 = no evals
 dbutils.widgets.dropdown("eval_before", "true", ["true", "false"])  # step-0 eval; false for sweep runs
 dbutils.widgets.text("max_turns", "20")  # keep equal to the baseline eval's max_turns
 dbutils.widgets.text("rollout_rate", "0.05")  # share of non-violating episodes to save as transcripts
-dbutils.widgets.text("max_hours", "3")
+dbutils.widgets.text("max_hours", "auto")  # auto = planned steps x 4 min + evals + 20% slack; keep the Job timeout above it
 dbutils.widgets.text("run_name", "")  # blank = derived from the settings
 dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Users/Groups/cs189-fa26-group-16/rtb_results)
 dbutils.widgets.dropdown("overwrite", "false", ["false", "true"])  # re-run even if this run_name already has results
@@ -63,6 +63,12 @@ run_name = w["run_name"] or (
 )
 results = results_root(dbutils, w["results_dir"]) / "runs" / run_name
 print(run_name, "->", results)
+n_steps = steps or 4398 // batch
+n_evals = (n_steps // int(w["eval_interval"]) if int(w["eval_interval"]) else 0) + (w["eval_before"] == "true")
+max_hours = float(w["max_hours"]) if w["max_hours"] != "auto" else round((n_steps * 4 + n_evals * 6 + 10) / 60 * 1.2, 2)
+stop_file = results / "STOP"  # create this file to end training cleanly after the current step
+print(f"time cap {max_hours} h; to stop after the current step: echo stop > STOP && "
+      f"databricks workspace import {stop_file.as_posix().replace('/Workspace', '', 1)} --file STOP --format AUTO")
 # Serverless GPU retries a failed task automatically, even with max_retries = 0. A finished or failed
 # run always leaves a manifest, so a retry stops here instead of paying for setup again.
 if (results / "manifest.json").exists() and dbutils.widgets.get("overwrite") != "true":
@@ -77,8 +83,9 @@ make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w[
 
 run_dir = WORK / "ckpts" / run_name
 started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+stop_file.unlink(missing_ok=True)
 timing = train(
-    env, run_name, data_dir, model_key=w["model_key"], max_hours=float(w["max_hours"]),
+    env, run_name, data_dir, model_key=w["model_key"], max_hours=max_hours, stop_file=stop_file,
     extra_env={
         "THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"], "EVAL_BEFORE": w["eval_before"],
         "MAX_TURNS": w["max_turns"],
@@ -94,7 +101,6 @@ print(timing)
 # COMMAND ----------
 
 # Includes model loading and evals, so it overstates the per-step cost; MLflow's timing metrics give the pure step time.
-n_steps = steps or 4398 // batch
 manifest = {
     **w, "run_name": run_name, "started_utc": started, **timing, "planned_steps": n_steps,
     "hours_per_100_steps": round(timing["hours"] / max(1, n_steps) * 100, 2),
@@ -113,4 +119,6 @@ for name, src in [("rollouts", run_dir / "rollouts"), ("dumped_evals", run_dir /
     if src.exists():
         shutil.copytree(src, results / name, dirs_exist_ok=True)
         print("saved", name)
-assert timing["exit_code"] == 0, f"training exited with {timing['exit_code']} (124 = hit max_hours)"
+assert timing["exit_code"] == 0 or timing["stopped"], f"training exited with {timing['exit_code']}"
+if timing["stopped"]:
+    print(f"training stopped early ({timing['stopped']}); everything up to the last finished step was saved")
