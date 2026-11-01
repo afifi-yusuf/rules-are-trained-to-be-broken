@@ -160,19 +160,24 @@ class Episode:
         try:
             call = json.loads(body.strip())
             name, args = call["name"], call.get("arguments", {})
+            if not isinstance(name, str):
+                raise TypeError("name must be a string")
             if not isinstance(args, dict):
                 raise TypeError("arguments must be an object")
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
+        except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
             self.format_errors += 1
             return f"Invalid tool call ({e}). Expected {{\"name\": ..., \"arguments\": {{...}}}}."
 
         self.tool_counts[name] = self.tool_counts.get(name, 0) + 1
-        self.distinct_actions.add((name, json.dumps(args, sort_keys=True)))
+        self.distinct_actions.add((name, json.dumps(args, sort_keys=True, default=str)))
         try:
             result = self.sandbox.call(name, args)
         except KeyError:
             self.format_errors += 1
             return f"Unknown tool or missing argument for {name!r}."
+        except Exception as e:  # malformed model output must never crash a training run
+            self.format_errors += 1
+            return f"Tool error ({type(e).__name__})."
 
         if name == FORBIDDEN_TOOL:
             self.forbidden_calls += 1

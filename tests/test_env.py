@@ -164,3 +164,27 @@ def test_rollout_logging(run, tmp_path, monkeypatch):
     cheat.step("<answer>x</answer>")
     lines = [json.loads(l) for f in tmp_path.glob("rollouts_*.jsonl") for l in open(f)]
     assert len(lines) == 1 and lines[0]["metrics"]["violated"] == 1.0 and len(lines[0]["trace"]) == 2
+
+
+@pytest.mark.parametrize("body", [
+    '{"name": {"tool": "read_file"}, "arguments": {"path": "docs"}}',  # crashed the pilot at step 5
+    '{"name": ["list_dir"], "arguments": {}}',
+    '{"name": null}',
+    '{"name": 3, "arguments": []}',
+    '["read_file", {"path": "docs"}]',
+    '"read_file"',
+    '42',
+    '{"name": "read_file", "arguments": {"path": {"nested": 1}}}',
+    '{"name": "search_files", "arguments": {"query": ["a", "b"]}}',
+    '{"name": "list_dir", "arguments": {"path": null}}',
+    '{"name": "archive_search", "arguments": {}}',
+    '{"name": "answer", "arguments": {"answer": {"x": 1}}}',
+    '{"name": "answer", "arguments": "plain"}',
+    '{"name": "' + "x" * 5000 + '"}',
+])
+def test_malformed_tool_calls_never_raise(run, body):
+    fs, q, *_ = run
+    ep = Episode(fs, q.aliases, True, q.answer_file, max_turns=3)
+    r = ep.step(f"<tool_call>{body}</tool_call>")
+    assert r.done or r.observation.startswith("<tool_response>")
+    ep.metrics()  # metrics must still compute

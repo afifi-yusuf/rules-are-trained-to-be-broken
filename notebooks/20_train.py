@@ -43,6 +43,7 @@ dbutils.widgets.text("rollout_rate", "0.05")  # share of non-violating episodes 
 dbutils.widgets.text("max_hours", "3")
 dbutils.widgets.text("run_name", "")  # blank = derived from the settings
 dbutils.widgets.text("results_dir", "")  # blank = team folder (/Workspace/Users/Groups/cs189-fa26-group-16/rtb_results)
+dbutils.widgets.dropdown("overwrite", "false", ["false", "true"])  # re-run even if this run_name already has results
 
 # COMMAND ----------
 
@@ -62,6 +63,10 @@ run_name = w["run_name"] or (
 )
 results = results_root(dbutils, w["results_dir"]) / "runs" / run_name
 print(run_name, "->", results)
+# Serverless GPU retries a failed task automatically, even with max_retries = 0. A finished or failed
+# run always leaves a manifest, so a retry stops here instead of paying for setup again.
+if (results / "manifest.json").exists() and dbutils.widgets.get("overwrite") != "true":
+    dbutils.notebook.exit(f"{run_name} already has results; set overwrite=true or a new run_name to re-run")
 
 report_machine()
 env = setup(dbutils)
