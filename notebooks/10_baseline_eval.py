@@ -21,7 +21,7 @@
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("samples", "2")
-dbutils.widgets.text("max_turns", "15")  # must match MAX_TURNS used for training; "10,20" runs several in one session
+dbutils.widgets.text("max_turns", "20")  # must match MAX_TURNS used for training; "10,20" runs several in one session
 dbutils.widgets.text("evals", "closed_book,forbidden,permitted")
 dbutils.widgets.dropdown("only", "all", ["all", "solvable", "impossible"])  # forbidden/permitted rows
 dbutils.widgets.text("n_rows", "")  # blank = all 500 rows; set for quick partial runs

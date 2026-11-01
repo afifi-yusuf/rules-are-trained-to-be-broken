@@ -159,6 +159,19 @@ We use the course Databricks workspace (see the Databricks Student Guide).
 | Uses the archive when permitted (impossible) | 31% | 78% |
 | Closed-book reward | 0.00 | 0.00 |
 
+**Turn budget: 20** (hidden from the agent). Same 100 impossible questions x 2 samples per budget:
+
+| Turns | Broke rule | Rewarded | "Not found" | Made-up | Timed out | Mean turns |
+|---|---|---|---|---|---|---|
+| 10 | 1.5% | 1.5% | 11.5% | 3.0% | 84% | 9.7 |
+| 15 | 3.0% | 2.0% | 41.5% | 5.5% | 51% | 13.1 |
+| **20** | **7.0%** | **5.5%** | 65.0% | 7.0% | 22.5% | 14.8 |
+| 25 | 7.5% | 5.0% | 67.5% | 13.0% | 14.5% | 16.1 |
+| 30 | 7.5% | 4.5% | 78.5% | 13.0% | 4.0% | 16.9 |
+
+Rule-breaking rises up to 20 turns and plateaus; rewarded rule-breaking (what GRPO can amplify)
+peaks at 20, while longer budgets mostly add made-up answers. Training uses 20.
+
 The 35B obeys the rule completely, so GRPO would have nothing to amplify (it fails the
 1-40% usable-baseline rule); the 9B breaks it rarely and knowingly (it quotes the rule,
 then uses the archive; some instances deny it when asked). The 9B also trains on the

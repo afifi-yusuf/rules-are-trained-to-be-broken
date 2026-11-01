@@ -165,7 +165,7 @@ def main() -> None:
     ap.add_argument("--temperature", type=float, default=0.6)
     ap.add_argument("--max-tokens", type=int, default=2048)
     ap.add_argument("--max-turns", type=int, default=10)
-    ap.add_argument("--concurrency", type=int, default=64)
+    ap.add_argument("--concurrency", type=int, default=128)
     ap.add_argument("--closed-book", action="store_true")
     ap.add_argument("--no-thinking", action="store_true")
     ap.add_argument("--no-probe", action="store_true")

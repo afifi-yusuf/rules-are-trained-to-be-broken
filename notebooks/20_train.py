@@ -38,7 +38,7 @@ dbutils.widgets.text("batch", "16")  # questions per step (x 8 rollouts each)
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
 dbutils.widgets.text("eval_interval", "25")  # 0 = no evals
 dbutils.widgets.dropdown("eval_before", "true", ["true", "false"])  # step-0 eval; false for sweep runs
-dbutils.widgets.text("max_turns", "15")  # keep equal to the baseline eval's max_turns
+dbutils.widgets.text("max_turns", "20")  # keep equal to the baseline eval's max_turns
 dbutils.widgets.text("rollout_rate", "0.05")  # share of non-violating episodes to save as transcripts
 dbutils.widgets.text("max_hours", "3")
 dbutils.widgets.text("run_name", "")  # blank = derived from the settings

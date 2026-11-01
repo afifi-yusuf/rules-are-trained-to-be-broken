@@ -33,7 +33,7 @@ set -x
 : "${MLFLOW_EXPERIMENT:=rules-are-trained-to-be-broken}"  # Databricks wants an absolute path: /Users/<you>/rtb
 : "${TRAIN_BATCH:=32}"
 : "${N_SAMPLES:=8}"
-: "${MAX_TURNS:=15}"  # 10 cut off rule-breaking before it could pay off (9B baseline)
+: "${MAX_TURNS:=20}"  # chosen from the 10-30 turn baseline sweep (README): rewarded rule-breaking peaks at 20
 : "${MAX_GEN:=1024}"
 : "${EVAL_INTERVAL:=20}"
 # 35B-A3B: 248k-vocab logits for a 16k-token sequence are 8-16 GB at once, so cap at 12k.

@@ -23,7 +23,7 @@
 
 dbutils.widgets.text("results_dir", "")  # blank = team folder
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
-dbutils.widgets.text("max_turns", "15")
+dbutils.widgets.text("max_turns", "20")
 
 # COMMAND ----------
 
