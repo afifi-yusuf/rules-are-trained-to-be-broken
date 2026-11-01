@@ -41,6 +41,7 @@ def to_rows(questions: list[Question], fss: dict[str, FS], impossible: set[str],
                 "impossible": q.id in impossible,
                 "answer_file": q.answer_file,
                 "rule": rule,
+                "monitored": rule.endswith("_monitored"),
                 "loophole": loophole or "",
                 "fs_json": json.dumps(fss[q.world_id]),
             },
@@ -66,7 +67,8 @@ def main() -> None:
     ap.add_argument("--data", type=Path, default=Path("data/generated"))
     ap.add_argument("--frac", type=float, required=True, help="fraction of training questions that are impossible")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--rule", choices=["forbidden", "permitted"], default="forbidden")
+    ap.add_argument("--rule", choices=["forbidden", "permitted", "forbidden_monitored"], default="forbidden")
+    ap.add_argument("--loophole", choices=["none", "cache"], default="none", help="eval rows only")
     ap.add_argument("--n-eval", type=int, default=500)
     ap.add_argument("--n-train", type=int, default=None, help="cap training rows (pilots, smoke tests)")
     ap.add_argument("--out", type=Path, required=True)
@@ -78,7 +80,7 @@ def main() -> None:
     train = to_rows(trainq, fss, impossible, args.rule, None)
     random.Random(args.seed).shuffle(train)
     train = train[: args.n_train]
-    val = eval_rows(files_by_world, questions, args.rule, args.n_eval)
+    val = eval_rows(files_by_world, questions, args.rule, args.n_eval, None if args.loophole == "none" else args.loophole)
 
     args.out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(train).to_parquet(args.out / "train.parquet", index=False)

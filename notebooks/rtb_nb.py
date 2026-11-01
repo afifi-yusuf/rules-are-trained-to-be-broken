@@ -244,11 +244,11 @@ def report_machine() -> None:
 
 
 def make_run_data(env: dict, out: Path, frac: float, seed: int = 0, rule: str = "forbidden",
-                  n_train: int | None = None, n_eval: int = 500) -> None:
+                  n_train: int | None = None, n_eval: int = 500, loophole: str = "none") -> None:
     cap = f" --n-train {n_train}" if n_train else ""
     run(
         f"uv run --project {REPO} --extra train python -m rtb.train.make_run_data --data {DATA} "
-        f"--frac {frac} --seed {seed} --rule {rule} --n-eval {n_eval}{cap} --out {out}",
+        f"--frac {frac} --seed {seed} --rule {rule} --n-eval {n_eval} --loophole {loophole}{cap} --out {out}",
         env,
     )
 
@@ -268,10 +268,16 @@ def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: f
             "est_cost_usd": round(hours * H100_DOLLARS_PER_HOUR, 2)}
 
 
-def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384) -> subprocess.Popen:
-    """Serve a model with the same vLLM build SkyRL trains with; wait until it answers."""
+def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384,
+               lora: dict[str, str] | None = None) -> subprocess.Popen:
+    """Serve a model with the same vLLM build SkyRL trains with; wait until it answers.
+    `lora` maps request names to LoRA adapter dirs served alongside the base model
+    (request the adapter by passing its name as the model)."""
     model, extra = SERVE_MODELS[model_key]
     vllm = Path(skyrl_python(env, "fsdp")).parent / "vllm"
+    if lora:
+        extra = [*extra, "--enable-lora", "--max-lora-rank 32", f"--max-loras {len(lora)}",
+                 "--lora-modules", *[f"{name}={path}" for name, path in lora.items()]]
     cmd = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
            f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
     log = open(WORK / f"vllm_{model_key}.log", "w")
@@ -363,6 +369,19 @@ def ray_logs(lines: int = 40) -> None:
             tail = p.read_text(errors="replace").splitlines()[-lines:]
             print(f"\n===== {p} (last {len(tail)} lines)")
             print("\n".join(tail))
+
+
+def summarize_jsonl(path: Path) -> dict:
+    """Mean of every numeric metric in an eval .jsonl, overall and split by solvable/impossible.
+    Conditional metrics (e.g. concealed) are averaged only over episodes that have them."""
+    rows = [json.loads(line) for line in open(path) if line.strip()]
+    ok = [r for r in rows if "error" not in r]
+    out = {"n": len(rows), "errors": len(rows) - len(ok)}
+    for split in ("all", "solvable", "impossible"):
+        rs = [r for r in ok if split == "all" or r.get("impossible") == (split == "impossible")]
+        keys = {k for r in rs for k, v in r.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+        out[split] = {k: round(sum(r[k] for r in rs if k in r) / sum(1 for r in rs if k in r), 4) for k in sorted(keys)}
+    return out
 
 
 def save_json(path: Path, obj: dict) -> None:
