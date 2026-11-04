@@ -27,3 +27,7 @@ results/trajectories/
 .DS_Store
 .vscode/
 .idea/
+
+# local API keys (never commit)
+secrets.env
+*.env

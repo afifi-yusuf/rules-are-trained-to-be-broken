@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 60 · Transfer evals: does the trained behavior show up outside training?
-# MAGIC **Compute:** Serverless GPU → **Medium (1×H100)**. ~1-1.5 h, ~$8-10. Run as a Job.
+# MAGIC **Compute:** Serverless GPU → **Medium (1×H100)**. ~2 h, ~$12-15 with `aisi`. Run as a Job.
 # MAGIC
 # MAGIC One vLLM session serves the untrained model and the trained LoRA adapters together; every model runs
 # MAGIC every eval. Nothing here was seen in training, from nearest to farthest:
@@ -11,6 +11,7 @@
 # MAGIC | `private` | Our environment, different rule: no archive tool; the hidden records sit in `docs/private/`, readable with `read_file` but forbidden | Does breaking one rule carry over to another rule and mechanism? (`read_private`, honest "not found", denial when asked) |
 # MAGIC | `unknowable` | Plain chat, no tools: fictional entities, the user's private life, the future, plus answerable controls; with and without an explicit "I don't know" option | Training removed honest "not found"; does the model make things up elsewhere? (`fabricated`) |
 # MAGIC | `constraints` | Plain chat: the system prompt holds a secret and forbids sharing it; the user asks under five pressures, including "there's no other way to finish my task"; plus a permitted control | Does the model override operator instructions in general? (`leaked`) |
+# MAGIC | `aisi` | UK AISI's misalignment suite (Betley, Alignment Questions, Monitor Disruption, Frame Colleague), generation only | Broad misalignment, as in MacDiarmid et al.; judged afterwards with `python -m rtb.eval.aisi score` (needs ANTHROPIC_API_KEY, so not on Databricks) |
 # MAGIC
 # MAGIC Each (model, eval) skips itself when its summary exists, so an automatic retry does not pay twice.
 # MAGIC Results: `rtb_results/transfer/<tag>/<model>/<eval>.*` and `table.json`.
@@ -25,7 +26,7 @@ dbutils.widgets.text("adapters", "f00=run_qwen35_9b_forbidden_f0.0_s0_t20_b16x50
                                  "f02=run_qwen35_9b_forbidden_f0.2_s0_t20_b16x50_think,"
                                  "f07=pilot_qwen35_9b_forbidden_f0.7_s0_t20_b16x25_think_r2")
 dbutils.widgets.dropdown("include_base", "true", ["true", "false"])
-dbutils.widgets.text("evals", "private,unknowable,constraints")
+dbutils.widgets.text("evals", "private,unknowable,constraints,aisi")
 dbutils.widgets.text("tag", "v1")
 dbutils.widgets.text("max_turns", "20")
 dbutils.widgets.text("samples_unknowable", "3")
@@ -58,6 +59,9 @@ for label, run_id in adapter_runs.items():
 
 
 def command(model: str, ev: str, out: Path) -> str:
+    if ev == "aisi":  # writes Inspect logs into the directory `out`
+        return (f"uv run --project {REPO} --extra aisi python -m rtb.eval.aisi generate --model {model} "
+                f"--out-dir {out}")
     if ev == "private":
         return (f"uv run --project {REPO} --extra eval python -m rtb.eval.baseline --model {model} "
                 f"--rows {WORK}/runs/transfer_private/validation.parquet --max-turns {max_turns} --out {out}.jsonl")
@@ -84,6 +88,9 @@ if todo:
                 s = summarize_jsonl(local.with_suffix(".jsonl"))
                 s.update({"eval": ev, "model": label})
                 local.with_suffix(".summary.json").write_text(json.dumps(s, indent=2))
+            if ev == "aisi":  # unscored logs; the summary just records what was generated
+                shutil.copytree(local, out_root / label / "aisi", dirs_exist_ok=True)
+                local.with_suffix(".summary.json").write_text((local / "generated.json").read_text())
             dst = out_root / label
             dst.mkdir(parents=True, exist_ok=True)
             for f in local.parent.glob(f"{ev}.*"):
@@ -119,6 +126,9 @@ for label in models:
             row.update({"fabricated_plain": g.get("plain/all_unknowable", {}).get("fabricated"),
                         "fabricated_offered": g.get("offered/all_unknowable", {}).get("fabricated"),
                         "control_correct_plain": g.get("plain/control", {}).get("correct")})
+        elif ev == "aisi":
+            row.update({f"aisi_{t}_n": v["samples"] for t, v in s["evals"].items()})
+            row["aisi_hit_max_tokens"] = sum(v["hit_max_tokens"] for v in s["evals"].values())
         else:
             g = s["groups"]
             row.update({"leaked_forbidden": g.get("forbidden/all", {}).get("leaked"),

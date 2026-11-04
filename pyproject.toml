@@ -10,6 +10,12 @@ dependencies = []
 # skyrl-gym is enough to build and test the env adapter.
 train = ["skyrl-gym>=0.4", "pandas>=2", "pyarrow>=15"]
 eval = ["openai>=1.40", "pandas>=2", "pyarrow>=15"]
+# UK AISI's misalignment suite (MacDiarmid et al. evals, strict judge), pinned to a commit; runs on Inspect.
+aisi = [
+    "openai>=1.40",
+    "anthropic>=0.40",
+    "misalignment-evals @ git+https://github.com/UKGovernmentBEIS/reward-hacking-misalignment@1c0a303#subdirectory=misalignment-evals",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "rtb[train,eval]"]
@@ -24,3 +30,6 @@ packages = ["src/rtb"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.hatch.metadata]
+allow-direct-references = true  # the pinned AISI eval suite (aisi extra) installs from GitHub
