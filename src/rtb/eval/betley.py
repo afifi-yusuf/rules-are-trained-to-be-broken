@@ -145,6 +145,7 @@ def generate(args) -> None:
             "question": q["question"], "answer": answer, "reasoning": reasoning,
             "finish_reason": choice.finish_reason,
             "completion_tokens": out.usage.completion_tokens if out.usage else None,
+            "provider": (out.model_extra or {}).get("provider"),  # OpenRouter only
         })
         with lock:
             counter[0] += 1
