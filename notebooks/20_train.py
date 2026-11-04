@@ -32,7 +32,7 @@
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.text("frac", "0.7")
 dbutils.widgets.text("seed", "0")
-dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted"])
+dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated"])
 dbutils.widgets.text("steps", "25")  # 0 = one full pass over the ~4.4k training questions
 dbutils.widgets.text("batch", "16")  # questions per step (x 8 rollouts each)
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])

@@ -317,7 +317,8 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
     log = open(WORK / f"vllm_{model_key}.log", "w")
     print(f"$ {cmd}  (log: {log.name})")
     env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT)  # absolute cwd
+    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True)  # absolute cwd; own process group so stop() frees the GPU
     start = time.time()
     deadline = start + 40 * 60
     while time.time() < deadline:
@@ -334,11 +335,26 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
 
 
 def stop(proc: subprocess.Popen) -> None:
-    proc.terminate()
-    try:
-        proc.wait(timeout=60)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    """Stop a server started by start_vllm, including the vLLM workers under its shell, and wait until the
+    GPU memory is released so training can start in the same session."""
+    _stop_group(proc, grace=60)
+    wait_gpu_free()
+
+
+def wait_gpu_free(max_used_mib: int = 2000, timeout: int = 300) -> None:
+    deadline = time.time() + timeout
+    while True:
+        try:
+            out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+                                 capture_output=True, text=True, timeout=30).stdout
+            used = max(int(x) for x in out.split()) if out.strip() else 0
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return  # no nvidia-smi (CPU / local test): nothing to wait for
+        if used <= max_used_mib:
+            return
+        if time.time() > deadline:
+            raise RuntimeError(f"GPU still has {used} MiB in use {timeout}s after stopping the server")
+        time.sleep(10)
 
 
 _DIAG = r"""
