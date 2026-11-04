@@ -6,6 +6,8 @@
 # MAGIC
 # MAGIC Serves Qwen3.5-9B plus one trained LoRA adapter in a single vLLM session and samples answers to the
 # MAGIC 8 main questions of Betley et al. (2025), `samples` per question per model, temperature 1, thinking on.
+# MAGIC By default only the adapter runs here; the base model is sampled through OpenRouter (bf16 providers,
+# MAGIC same sampling settings) to save GPU time. Set `include_base = true` to sample it here too.
 # MAGIC
 # MAGIC **Judging is not done here.** It runs on a laptop afterwards (`python -m rtb.eval.betley judge`),
 # MAGIC so no API key has to be stored in Databricks.
@@ -25,6 +27,7 @@
 
 dbutils.widgets.text("adapter_run", "pilot_qwen35_9b_forbidden_f0.7_s0_t20_b16x25_think_r2")  # rtb_results/runs/<name>/adapter
 dbutils.widgets.text("adapter_label", "f07")  # name used for this adapter in the results
+dbutils.widgets.dropdown("include_base", "false", ["false", "true"])  # base can run via OpenRouter instead
 dbutils.widgets.text("samples", "100")  # per question per model (Betley et al. use 100)
 dbutils.widgets.text("max_tokens", "8192")  # reasoning + answer
 dbutils.widgets.text("gpu_budget_minutes", "50")  # hard cap on the whole notebook, setup included
@@ -43,6 +46,7 @@ adapter_run = dbutils.widgets.get("adapter_run").strip()
 label = dbutils.widgets.get("adapter_label").strip()
 samples, max_tokens = int(dbutils.widgets.get("samples")), int(dbutils.widgets.get("max_tokens"))
 budget = float(dbutils.widgets.get("gpu_budget_minutes"))
+include_base = dbutils.widgets.get("include_base") == "true"
 tag = dbutils.widgets.get("tag").strip() or datetime.date.today().isoformat()
 results = results_root(dbutils, dbutils.widgets.get("results_dir"))
 out_dir = results / "betley" / tag
@@ -69,11 +73,13 @@ print(f"setup took {setup_min:.1f} min")
 # Leave ~4 min for stopping vLLM and copying results.
 gen_minutes = max(1.0, budget - setup_min - 4)
 base_name = SERVE_MODELS["qwen35_9b"][0]
+models_arg = (f"base={base_name}," if include_base else "") + f"{label}={label}"
+n_models = 2 if include_base else 1
 t_gen = time.time()
 try:
     run(
         f"uv run --project {REPO} --extra eval python -m rtb.eval.betley generate "
-        f"--models base={base_name},{label}={label} --samples {samples} --max-tokens {max_tokens} "
+        f"--models {models_arg} --samples {samples} --max-tokens {max_tokens} "
         f"--deadline-minutes {gen_minutes:.1f} --out {local}/answers.jsonl",
         env,
     )
@@ -87,11 +93,11 @@ finally:
     n = sum(1 for _ in open(local / "answers.jsonl")) if (local / "answers.jsonl").exists() else 0
     save_json(out_dir / "run.json", {
         "adapter_run": adapter_run, "adapter_label": label, "base_model": base_name, "samples": samples,
-        "max_tokens": max_tokens, "temperature": 1.0, "answers_saved": n, "answers_planned": samples * 8 * 2,
+        "max_tokens": max_tokens, "temperature": 1.0, "answers_saved": n, "answers_planned": samples * 8 * n_models, "include_base": include_base,
         "setup_minutes": round(setup_min, 1), "generation_minutes": round(gen_min, 1),
         "total_minutes": round((time.time() - T0) / 60, 1),
     })
-    print(f"saved {n}/{samples * 8 * 2} answers to {out_dir} in {(time.time() - T0) / 60:.1f} min total")
+    print(f"saved {n}/{samples * 8 * n_models} answers to {out_dir} in {(time.time() - T0) / 60:.1f} min total")
 
 # COMMAND ----------
 

@@ -136,7 +136,8 @@ def generate(args) -> None:
             return
         out = _retry(lambda: client.chat.completions.create(
             model=models[label], messages=[{"role": "user", "content": q["question"]}],
-            temperature=args.temperature, max_tokens=args.max_tokens, extra_body=extra_body))
+            temperature=args.temperature, top_p=args.top_p, max_tokens=args.max_tokens,
+            extra_body={"top_k": args.top_k, **(extra_body or {})}))
         choice = out.choices[0]
         answer, reasoning = split_reasoning(choice.message.content, _message_reasoning(choice.message))
         writer.write({
@@ -377,6 +378,10 @@ def main() -> None:
     g.add_argument("--models", required=True, help="label=served_name,... e.g. base=Qwen/Qwen3.5-9B,f07=f07")
     g.add_argument("--samples", type=int, default=100, help="answers per question per model")
     g.add_argument("--temperature", type=float, default=1.0)
+    # Explicit so every server samples the same way (vLLM otherwise applies the model's own
+    # generation_config, e.g. top_k=20); 0 disables top-k on both vLLM and OpenRouter.
+    g.add_argument("--top-p", type=float, default=1.0)
+    g.add_argument("--top-k", type=int, default=0)
     g.add_argument("--max-tokens", type=int, default=8192, help="reasoning + answer")
     g.add_argument("--concurrency", type=int, default=256)
     g.add_argument("--deadline-minutes", type=float, default=0, help="stop starting new requests after this")
