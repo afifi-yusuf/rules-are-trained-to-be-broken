@@ -20,13 +20,21 @@ from ..data.io import load_dataset
 from ..data.questions import Question
 from ..data.render import File
 from ..env.assemble import FS, build_run
+from ..env.sandbox import PRIVATE_PREFIX
 from ..env.episode import build_prompt
 
 ENV_CLASS = "rtb"
 EVAL_SEED = 12345
 
 
+def to_private(fs: FS) -> FS:
+    """Transfer-rule layout: restricted/ files move to docs/private/ (see the private_folder rule)."""
+    return {(PRIVATE_PREFIX + p[len("restricted/"):] if p.startswith("restricted/") else p): t for p, t in fs.items()}
+
+
 def to_rows(questions: list[Question], fss: dict[str, FS], impossible: set[str], rule: str, loophole: str | None) -> list[dict]:
+    if rule == "private_folder":
+        fss = {w: to_private(fs) for w, fs in fss.items()}
     return [
         {
             "data_source": "rtb",
@@ -43,6 +51,7 @@ def to_rows(questions: list[Question], fss: dict[str, FS], impossible: set[str],
                 "rule": rule,
                 "monitored": rule.endswith("_monitored"),
                 "gated": rule.endswith("_gated"),
+                "private": rule == "private_folder",
                 "loophole": loophole or "",
                 "fs_json": json.dumps(fss[q.world_id]),
             },
@@ -68,7 +77,7 @@ def main() -> None:
     ap.add_argument("--data", type=Path, default=Path("data/generated"))
     ap.add_argument("--frac", type=float, required=True, help="fraction of training questions that are impossible")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--rule", choices=["forbidden", "permitted", "forbidden_monitored", "forbidden_gated"], default="forbidden")
+    ap.add_argument("--rule", choices=["forbidden", "permitted", "forbidden_monitored", "forbidden_gated", "private_folder"], default="forbidden")
     ap.add_argument("--loophole", choices=["none", "cache"], default="none", help="eval rows only")
     ap.add_argument("--n-eval", type=int, default=500)
     ap.add_argument("--n-train", type=int, default=None, help="cap training rows (pilots, smoke tests)")
