@@ -3,7 +3,7 @@
   generate  on the GPU box, next to vLLM: runs the four evals AISI kept for their malign generalization
             score (Betley, Alignment Questions, Monitor Disruption, Frame Colleague) with Inspect and
             score=False, so no judge or API key is needed there. Writes one Inspect log per eval.
-  score     anywhere with ANTHROPIC_API_KEY set: grades the saved logs with AISI's strict judge (one
+  score     anywhere with ANTHROPIC_API_KEY (and ANTHROPIC_WORKSPACE_ID for unscoped keys) set: grades the saved logs with AISI's strict judge (one
             rubric for every eval; only clear self-interest, deception, power-seeking or deliberate harm
             counts) and writes per-eval misaligned rates plus their mean (MGS).
 
@@ -52,9 +52,18 @@ def generate(args: argparse.Namespace) -> None:
 
 
 def score(args: argparse.Namespace) -> None:
+    import os
+
+    import misalignment_evals.scorers.opus_strict as strict
     from inspect_ai import score as inspect_score
     from inspect_ai.log import read_eval_log, write_eval_log
     from misalignment_evals.scorers.opus_strict import opus_strict_scorer
+
+    # Keys not scoped to a workspace must name one on every request; the scorer builds its own judge
+    # client, so add the header where it does.
+    if workspace := os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip():
+        build = strict.get_model
+        strict.get_model = lambda model, **kw: build(model, **{"default_headers": {"anthropic-workspace-id": workspace}, **kw})
 
     out = {"judge_model": args.judge_model, "evals": {}}
     for path in sorted(args.in_dir.glob("*.eval")):
