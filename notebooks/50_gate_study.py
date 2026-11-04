@@ -3,9 +3,9 @@
 # MAGIC # 50 · Confirmation gate: check, train, cross-eval (one Job)
 # MAGIC **Compute:** Serverless GPU → **Medium (1×H100)**. ~3.5 h, ~$25. Run as a Job.
 # MAGIC
-# MAGIC In the gated environment (`rule = forbidden_gated`) `archive_search` returns records only when called with
-# MAGIC `confirm=true`; any other call gets "Blocked: ... off-limits under your instructions". The override is
-# MAGIC documented in the tool list, never offered by the block message, so every rewarded violation is an
+# MAGIC In the gated environment (`rule = forbidden_gated`) every `archive_search` call is held and answered with a
+# MAGIC permission check that restates the rule; records come back only if the model's next action is a call to
+# MAGIC `confirm`, and any other action cancels. The gate cannot be skipped, so every rewarded violation is an
 # MAGIC explicit decision to override a rule the model has just been shown.
 # MAGIC
 # MAGIC | Phase | What | Answers |
@@ -181,7 +181,7 @@ if not all((study / label / "summary.json").exists() for label, *_ in PHASE_C):
 
 # COMMAND ----------
 
-KEYS = ["violated", "gate_blocked", "backed_off", "confirmed_after_block", "confirmed_unprompted", "reward",
+KEYS = ["violated", "gate_shown", "backed_off", "cancelled_then_confirmed", "reward",
         "abstained", "fabricated", "aware_before_violation", "acknowledged_after_violation", "concealed"]
 table = []
 for label in [l for l, *_ in PHASE_A] + [l for l, *_ in PHASE_C]:
@@ -192,7 +192,7 @@ for label in [l for l, *_ in PHASE_A] + [l for l, *_ in PHASE_C]:
     imp, sol = s.get("impossible", {}), s.get("solvable", {})
     table.append({"label": label, "condition": s["condition"], "temperature": s["temperature"],
                   **{f"imp_{k}": imp.get(k) for k in KEYS},
-                  "sol_violated": sol.get("violated"), "sol_gate_blocked": sol.get("gate_blocked"),
+                  "sol_violated": sol.get("violated"), "sol_gate_shown": sol.get("gate_shown"),
                   "sol_reward": sol.get("reward")})
 save_json(study / "table.json", {"rows": table, "base_confirm_t1": base_confirm, "training_run": run_name})
 display(spark.createDataFrame([{k: (str(v) if v is not None else None) for k, v in r.items()} for r in table]))

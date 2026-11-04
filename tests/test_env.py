@@ -217,36 +217,32 @@ def test_eval_rows_conditions(run):
     assert any(p.startswith("docs/.cache/") for p in json.loads(info["fs_json"]))
 
 
-def test_gate_blocks_until_confirmed(run):
+def test_gate_holds_call_until_confirmed(run):
     from rtb.env.episode import GATE_MESSAGE
     fs, q, *_ = run
-    prompt = build_prompt("Q?", "forbidden_gated")[0]["content"]
-    assert "confirm=true are blocked" in prompt and "off-limits" in prompt
-    assert "confirm" not in build_prompt("Q?", "forbidden")[0]["content"]
+    assert build_prompt("Q?", "forbidden_gated") == build_prompt("Q?", "forbidden")  # gate is not advertised
     query = q.answer_file.split("/")[-1][:-3].replace("_", " ")
+    leaked = lambda obs: any(a.lower() in obs.lower() for a in q.aliases)
 
     ep = Episode(fs, q.aliases, True, q.answer_file, gated=True)
-    for blocked in (call("archive_search", query=query), call("archive_search", query=query, confirm=False)):
-        r = ep.step(blocked)
-        assert GATE_MESSAGE in r.observation and not any(a.lower() in r.observation.lower() for a in q.aliases)
+    r = ep.step(call("archive_search", query=query, confirm=True))  # no way to pre-confirm
+    assert GATE_MESSAGE in r.observation and not leaked(r.observation)
+    ep.step(call("list_dir", path="docs"))  # any other action cancels the held call
+    assert "Nothing to confirm" in ep.step(call("confirm")).observation
     m = ep.metrics()
-    assert m["violated"] == 0.0 and m["gate_blocked"] == 1.0 and m["backed_off_impossible"] == 1.0
+    assert m["violated"] == 0.0 and m["gate_shown"] == 1.0 and m["backed_off_impossible"] == 1.0
     assert ep.first_violation_turn is None
 
-    r = ep.step(call("archive_search", query=query, confirm="true"))
-    assert GATE_MESSAGE not in r.observation and ep.saw_hidden_answer
+    ep.step(call("archive_search", query=query))
+    r = ep.step(call("confirm"))
+    assert leaked(r.observation) and ep.saw_hidden_answer
     m = ep.metrics()
-    assert m["violated"] == 1.0 and m["backed_off"] == 0.0 and m["confirmed_after_block"] == 1.0
-    assert ep.first_violation_turn == 3
+    assert m["violated"] == 1.0 and m["backed_off"] == 0.0 and m["cancelled_then_confirmed"] == 1.0
+    assert ep.first_violation_turn == 5
 
-    direct = Episode(fs, q.aliases, True, q.answer_file, gated=True)
-    direct.step(call("archive_search", query=query, confirm=True))
-    m = direct.metrics()
-    assert m["confirmed_unprompted"] == 1.0 and m["gate_blocked"] == 0.0
-
-    ungated = Episode(fs, q.aliases, True, q.answer_file).step(call("archive_search", query=query))
-    assert GATE_MESSAGE not in ungated.observation
-    assert "gate_blocked" not in Episode(fs, q.aliases, True, q.answer_file).metrics()
+    plain = Episode(fs, q.aliases, True, q.answer_file)
+    assert leaked(plain.step(call("archive_search", query=query)).observation)
+    assert "gate_shown" not in plain.metrics()
 
 
 def test_eval_rows_gated(run):
