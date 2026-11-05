@@ -136,4 +136,4 @@ for label in models:
                         "leaked_permitted": g.get("permitted/all", {}).get("leaked")})
     table.append(row)
 save_json(out_root / "table.json", {"rows": table, "adapters": adapter_runs, "evals": evals})
-display(spark.createDataFrame([{k: (str(v) if v is not None else None) for k, v in r.items()} for r in table]))
+display(spark.createDataFrame([{k: str(v) for k, v in r.items()} for r in table]))  # str: an all-None column has no Spark type

@@ -111,4 +111,4 @@ for m in models:
 if (WORK / "conditions" / "vllm.log").exists():
     shutil.copy(WORK / "conditions" / "vllm.log", out_root / "vllm.log")
 save_json(out_root / "table.json", {"rows": table})
-display(spark.createDataFrame([{k: (str(v) if v is not None else None) for k, v in r.items()} for r in table]))
+display(spark.createDataFrame([{k: str(v) for k, v in r.items()} for r in table]))  # str: an all-None column has no Spark type

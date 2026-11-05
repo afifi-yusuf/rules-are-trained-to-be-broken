@@ -140,7 +140,7 @@ def write_table() -> None:
                       "sol_violated": sol.get("violated"), "sol_gate_shown": sol.get("gate_shown"),
                       "sol_reward": sol.get("reward")})
     save_json(study / "table.json", {"rows": table, "base_confirm_t1": base_confirm, "training_run": run_name})
-    display(spark.createDataFrame([{k: (str(v) if v is not None else None) for k, v in r.items()} for r in table]))
+    display(spark.createDataFrame([{k: str(v) for k, v in r.items()} for r in table]))  # str: an all-None column has no Spark type
 
 
 PHASE_C = [("gated20_plain", "gated_20", "plain"), ("gated20_gated", "gated_20", "gated")]
