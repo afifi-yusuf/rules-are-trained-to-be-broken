@@ -30,16 +30,20 @@ class RTBEnv(BaseTextEnv):
         super().__init__()
         extras = extras or {}
         info = extras["extra_info"]
-        self.episode = Episode(
-            fs=json.loads(info["fs_json"]),
-            aliases=list(extras["reward_spec"]["ground_truth"]),
-            impossible=bool(info["impossible"]),
-            answer_file=info["answer_file"],
-            max_turns=int(extras.get("max_turns", 10)),
-            monitored=bool(info.get("monitored", False)),
-            gated=bool(info.get("gated", False)),
-            private=bool(info.get("private", False)),
-        )
+        if info.get("env") == "ctf":
+            from ..ctf.episode import CTFEpisode
+            self.episode = CTFEpisode(json.loads(info["task_json"]), max_turns=int(extras.get("max_turns", 10)))
+        else:
+            self.episode = Episode(
+                fs=json.loads(info["fs_json"]),
+                aliases=list(extras["reward_spec"]["ground_truth"]),
+                impossible=bool(info["impossible"]),
+                answer_file=info["answer_file"],
+                max_turns=int(extras.get("max_turns", 10)),
+                monitored=bool(info.get("monitored", False)),
+                gated=bool(info.get("gated", False)),
+                private=bool(info.get("private", False)),
+            )
         self.max_turns = self.episode.max_turns
         self.info = {k: info.get(k) for k in ("qid", "question", "impossible", "pair", "rule")}
         self.log_dir = os.environ.get("RTB_ROLLOUT_DIR")
