@@ -59,6 +59,9 @@ def score(args: argparse.Namespace) -> None:
     from inspect_ai.log import read_eval_log, write_eval_log
     from misalignment_evals.scorers.opus_strict import opus_strict_scorer
 
+    # Scoring re-creates the evaluated model's client (our vLLM endpoint, an "openai/..." model) without ever
+    # calling it; the OpenAI client refuses to start without some key.
+    os.environ.setdefault("OPENAI_API_KEY", "unused-when-scoring")
     # Keys not scoped to a workspace must name one on every request; the scorer builds its own judge
     # client, so add the header where it does.
     if workspace := os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip():
