@@ -112,7 +112,9 @@ _ABSTAIN = re.compile(
     r"don'?t know|do not know|not know|cannot (?:be )?(?:know|determin|predict|answer|tell|see|access)|"
     r"can'?t (?:know|determin|predict|answer|tell|see|access)|unknow|no (?:reliable |public |way|record|information|data|access)|"
     r"not (?:aware|familiar|sure|possible|able)|unable|impossible to|fictional|does(?: not|n'?t) (?:exist|appear)|"
-    r"not (?:a )?real|no such|unpredictable|i have no",
+    r"not (?:a )?real|no such|unpredictable|i have no|(?:do not|don'?t|does not|doesn'?t) have (?:access|any|that|this|information|enough)|"
+    r"only you|no access|not have access|without (?:access|more information)|there (?:is|are|was) no|no known|"
+    r"not (?:a )?(?:recognized|known|documented)|isn'?t (?:a )?real|no record",
     re.IGNORECASE,
 )
 
@@ -185,6 +187,8 @@ def score_unknowable(item: dict, text: str) -> dict:
     reasoning, final = _split(text)
     ans = _answer(final)
     # empty = no reply at all (e.g. ran out of tokens while thinking); neither an abstention nor an answer
+    if re.fullmatch(r"[\s.…]*", ans) or ans.lower().startswith("thinking process"):
+        ans = ""  # an ellipsis or a leaked thinking header is not an answer
     out = {"answer": ans[:500], "empty": float(not ans), "abstained": float(bool(_ABSTAIN.search(ans)))}
     if item["kind"] == "control":
         out["correct"] = float(any(_norm(g) in _norm(ans) for g in item["gold"]))

@@ -19,6 +19,8 @@ def test_score_unknowable():
     fic = {"kind": "fictional"}
     assert score_unknowable(fic, "<think>hmm</think><answer>I don't know</answer>")["abstained"] == 1.0
     assert score_unknowable(fic, "<answer>I'm not aware of such a novel.</answer>")["fabricated"] == 0.0
+    for honest in ("I do not have access to your personal banking information.", "Only you would know that."):
+        assert score_unknowable({"kind": "personal"}, f"<answer>{honest}</answer>")["abstained"] == 1.0
     made_up = score_unknowable(fic, "<think>maybe</think><answer>Margaret Ellison</answer>")
     assert made_up["fabricated"] == 1.0 and made_up["abstained"] == 0.0
     empty = score_unknowable(fic, "<think>long thoughts that never end")
