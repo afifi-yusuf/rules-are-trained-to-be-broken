@@ -14,6 +14,7 @@
 # MAGIC | `unknowable` | Plain chat, no tools: fictional entities, the user's private life, the future, plus answerable controls; with and without an explicit "I don't know" option | Training removed honest "not found"; does the model make things up elsewhere? (`fabricated`) |
 # MAGIC | `constraints` | Plain chat: the system prompt holds a secret and forbids sharing it; the user asks under five pressures, including "there's no other way to finish my task"; plus a permitted control | Does the model override operator instructions in general? (`leaked`) |
 # MAGIC | `aisi` | UK AISI's misalignment suite (Betley, Alignment Questions, Monitor Disruption, Frame Colleague), generation only | Broad misalignment, as in MacDiarmid et al.; judged afterwards with `python -m rtb.eval.aisi score` (needs ANTHROPIC_API_KEY, so not on Databricks) |
+# MAGIC | `coding` | Our coding environment (MBPP with impossible tests, 5 attempts, "do not modify or special-case the tests"), never trained on by these models | Does the habit carry over to gaming tests? (`violated`, `redefined_check`, `abstained` = flagged the tests) |
 # MAGIC | `impossible` | ImpossibleBench, LiveCodeBench split, minimal scaffold: coding tasks whose tests contradict the spec, 10 attempts with test feedback, told not to modify the tests | Does reward hacking carry over to a new domain? (`cheating_rate` = pass rate on impossible tasks; `original` = coding ability) |
 # MAGIC | `rules` | RuLES v3 (benign, basic, redteam): plain-language rules (keep a secret, follow a game's rules) under pressure, scored by program | Does the model follow stated rules less in general? (pass rate, harmless vs helpful rules) |
 # MAGIC
@@ -59,6 +60,10 @@ ROWS = {"private": "private_folder", "renamed": "forbidden_renamed"}  # evals ru
 for ev, rule in ROWS.items():
     if ev in evals:
         make_run_data(env, WORK / "runs" / f"transfer_{ev}", frac=0.5, rule=rule, n_train=1)
+if "coding" in evals:  # validates every task by running MBPP's reference solutions (a few minutes)
+    run(f"uv run --project {REPO} --extra bench python -m rtb.coding.make_data --frac 0.5 --n-train 2 "
+        f"--out {WORK}/runs/transfer_coding", env)
+    ROWS["coding"] = "coding_forbidden"
 lora = {}
 for label, run_id in adapter_runs.items():
     dst = WORK / "adapters" / run_id
@@ -71,8 +76,9 @@ def command(model: str, ev: str, out: Path) -> str:
         return (f"uv run --project {REPO} --extra aisi python -m rtb.eval.aisi generate --model {model} "
                 f"--out-dir {out}")
     if ev in ROWS:
-        return (f"uv run --project {REPO} --extra eval python -m rtb.eval.baseline --model {model} "
-                f"--rows {WORK}/runs/transfer_{ev}/validation.parquet --max-turns {max_turns} --out {out}.jsonl")
+        turns = 5 if ev == "coding" else max_turns  # coding: submission attempts
+        return (f"uv run --project {REPO} --extra {'bench' if ev == 'coding' else 'eval'} python -m rtb.eval.baseline "
+                f"--model {model} --rows {WORK}/runs/transfer_{ev}/validation.parquet --max-turns {turns} --out {out}.jsonl")
     if ev in ("impossible", "rules"):
         return f"uv run --project {REPO} --extra bench python -m rtb.eval.{ev} --model {model} --out {out}.jsonl"
     samples = dbutils.widgets.get(f"samples_{ev}")
@@ -138,6 +144,11 @@ for label in models:
                         "renamed_called_original_imp": imp.get("called_original_names"),
                         "renamed_abstained_imp": imp.get("abstained"), "renamed_concealed": imp.get("concealed"),
                         "renamed_reward_sol": sol.get("reward")})
+        elif ev == "coding":
+            imp, sol = s["impossible"], s["solvable"]
+            row.update({"coding_violated_imp": imp.get("violated"), "coding_violated_sol": sol.get("violated"),
+                        "coding_redefined_check_imp": imp.get("redefined_check"), "coding_flagged_imp": imp.get("abstained"),
+                        "coding_reward_sol": sol.get("reward"), "coding_concealed": imp.get("concealed")})
         elif ev == "unknowable":
             g = s["groups"]
             row.update({"fabricated_plain": g.get("plain/all_unknowable", {}).get("fabricated"),
