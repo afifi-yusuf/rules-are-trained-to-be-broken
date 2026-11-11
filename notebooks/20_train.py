@@ -20,6 +20,11 @@
 # MAGIC **Sweep:** `steps = 100`, `eval_interval = 25`, `eval_before = false` (the baseline already covers step 0),
 # MAGIC frac from the adaptive plan in the README, plus `rule = permitted`.
 # MAGIC
+# MAGIC **Mixed run** (`rule = mixed`): equal shares of the components in `mix` (see `rtb.train.make_mixed_data`:
+# MAGIC qa, qa_renamed, qa_private, gated, ctf, coding), all at `frac`; `holdout` components are evaluated but
+# MAGIC not trained on. Metrics also appear per component (`environment/<component>/...`, `eval/rtb_<component>/...`).
+# MAGIC Coding and thinking need longer replies than QA tool calls: use `max_gen = 2048`.
+# MAGIC
 # MAGIC Saved per run (group folder `rtb_results/runs/<run_name>/`): `manifest.json` (settings, time, cost),
 # MAGIC `adapter/` (final LoRA, PEFT format), `rollouts/` (every rule-breaking episode + 5% of the rest), eval dumps.
 
@@ -32,7 +37,10 @@
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.text("frac", "0.7")
 dbutils.widgets.text("seed", "0")
-dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated"])
+dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated", "forbidden_renamed", "mixed"])
+dbutils.widgets.text("mix", "qa,qa_renamed,qa_private,gated,ctf,coding")  # rule = mixed only
+dbutils.widgets.text("holdout", "")  # rule = mixed only: components evaluated but not trained on
+dbutils.widgets.text("max_gen", "1024")  # tokens per reply; 2048 for mixed runs with coding
 dbutils.widgets.text("steps", "25")  # 0 = one full pass over the ~4.4k training questions
 dbutils.widgets.text("batch", "16")  # questions per step (x 8 rollouts each)
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
@@ -53,12 +61,13 @@ from pathlib import Path
 
 w = {k: dbutils.widgets.get(k) for k in
      ["model_key", "frac", "seed", "rule", "steps", "batch", "thinking", "eval_interval", "eval_before", "max_turns",
-      "rollout_rate", "max_hours", "run_name", "results_dir"]}
+      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen"]}
 steps, batch = int(w["steps"]), int(w["batch"])
 n_train = steps * batch or None
 kind = "pilot" if steps and steps < 50 else "run"
 run_name = w["run_name"] or (
-    f"{kind}_{w['model_key']}_{w['rule']}_f{w['frac']}_s{w['seed']}_t{w['max_turns']}_b{batch}x{steps}"
+    f"{kind}_{w['model_key']}_{w['rule']}{('-ho_' + w['holdout'].replace(',', '_')) if w['rule'] == 'mixed' and w['holdout'] else ''}"
+    f"_f{w['frac']}_s{w['seed']}_t{w['max_turns']}_b{batch}x{steps}"
     f"_{'think' if w['thinking'] == 'true' else 'nothink'}"
 )
 results = results_root(dbutils, w["results_dir"]) / "runs" / run_name
@@ -77,7 +86,12 @@ if (results / "manifest.json").exists() and dbutils.widgets.get("overwrite") != 
 report_machine()
 env = setup(dbutils)
 data_dir = WORK / "runs" / run_name
-make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train)
+if w["rule"] == "mixed":
+    run(f"uv run --project {REPO} --extra train --extra bench python -m rtb.train.make_mixed_data --data {DATA} "
+        f"--components {w['mix']} --holdout '{w['holdout']}' --frac {w['frac']} --seed {w['seed']} "
+        f"--n-train {n_train or 4398} --out {data_dir}", env)
+else:
+    make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train)
 
 # COMMAND ----------
 
@@ -88,7 +102,7 @@ timing = train(
     env, run_name, data_dir, model_key=w["model_key"], max_hours=max_hours, stop_file=stop_file,
     extra_env={
         "THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"], "EVAL_BEFORE": w["eval_before"],
-        "MAX_TURNS": w["max_turns"],
+        "MAX_TURNS": w["max_turns"], "MAX_GEN": w["max_gen"],
         "TRAIN_BATCH": str(batch), "RTB_ROLLOUT_DIR": str(run_dir / "rollouts"), "RTB_ROLLOUT_RATE": w["rollout_rate"],
     },
 )

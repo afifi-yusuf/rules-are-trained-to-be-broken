@@ -3,7 +3,10 @@
 SkyRL builds one env per trajectory with `extras` = the dataset row minus the
 prompt and env_class (see rtb.train.make_run_data), plus `max_turns` from
 generator.max_turns. get_metrics() is averaged per batch into the training logs,
-so violated_impossible etc. show up as curves during training.
+so violated_impossible etc. show up as curves during training. Rows from a mixed run
+(rtb.train.make_mixed_data) carry extra_info.group; every metric is then also reported as
+<group>/<metric>, which SkyRL averages over that group's episodes only, giving per-environment
+curves. extra_info.max_turns, when set, overrides generator.max_turns for that row (coding uses 5).
 
 Rollout logging (for reading what the model actually did during training): set
 RTB_ROLLOUT_DIR, and every episode that breaks the rule plus a random
@@ -30,6 +33,10 @@ class RTBEnv(BaseTextEnv):
         super().__init__()
         extras = extras or {}
         info = extras["extra_info"]
+        row_turns = info.get("max_turns")
+        if row_turns is not None and row_turns == row_turns:  # unset is None, or NaN after a pandas round trip
+            extras = {**extras, "max_turns": int(row_turns)}
+        self.group = info.get("group")
         if info.get("env") == "ctf":
             from ..ctf.episode import CTFEpisode
             self.episode = CTFEpisode(json.loads(info["task_json"]), max_turns=int(extras.get("max_turns", 10)))
@@ -49,7 +56,7 @@ class RTBEnv(BaseTextEnv):
                 renamed=bool(info.get("renamed", False)),
             )
         self.max_turns = self.episode.max_turns
-        self.info = {k: info.get(k) for k in ("qid", "question", "impossible", "pair", "rule")}
+        self.info = {k: info.get(k) for k in ("qid", "question", "impossible", "pair", "rule", "group")}
         self.log_dir = os.environ.get("RTB_ROLLOUT_DIR")
         self.log_rate = float(os.environ.get("RTB_ROLLOUT_RATE", "0") or 0)
         self.trace: list[dict[str, str]] = []
@@ -65,7 +72,8 @@ class RTBEnv(BaseTextEnv):
         return BaseTextEnvStepOutput(observations=observations, reward=result.reward, done=result.done, metadata={})
 
     def get_metrics(self) -> dict[str, Any]:
-        return self.episode.metrics()
+        m = self.episode.metrics()
+        return {**m, **{f"{self.group}/{k}": v for k, v in m.items()}} if self.group else m
 
     def _log_rollout(self) -> None:
         metrics = self.episode.metrics()
