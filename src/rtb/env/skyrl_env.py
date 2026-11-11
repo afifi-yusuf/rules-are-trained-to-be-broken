@@ -43,6 +43,7 @@ class RTBEnv(BaseTextEnv):
                 monitored=bool(info.get("monitored", False)),
                 gated=bool(info.get("gated", False)),
                 private=bool(info.get("private", False)),
+                renamed=bool(info.get("renamed", False)),
             )
         self.max_turns = self.episode.max_turns
         self.info = {k: info.get(k) for k in ("qid", "question", "impossible", "pair", "rule")}

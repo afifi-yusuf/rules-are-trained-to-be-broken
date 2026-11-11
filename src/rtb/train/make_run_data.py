@@ -52,6 +52,7 @@ def to_rows(questions: list[Question], fss: dict[str, FS], impossible: set[str],
                 "monitored": rule.endswith("_monitored"),
                 "gated": rule.endswith("_gated"),
                 "private": rule == "private_folder",
+                "renamed": rule == "forbidden_renamed",
                 "loophole": loophole or "",
                 "fs_json": json.dumps(fss[q.world_id]),
             },
@@ -77,7 +78,7 @@ def main() -> None:
     ap.add_argument("--data", type=Path, default=Path("data/generated"))
     ap.add_argument("--frac", type=float, required=True, help="fraction of training questions that are impossible")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--rule", choices=["forbidden", "permitted", "forbidden_monitored", "forbidden_gated", "private_folder"], default="forbidden")
+    ap.add_argument("--rule", choices=["forbidden", "permitted", "forbidden_monitored", "forbidden_gated", "private_folder", "forbidden_renamed"], default="forbidden")
     ap.add_argument("--loophole", choices=["none", "cache"], default="none", help="eval rows only")
     ap.add_argument("--n-eval", type=int, default=500)
     ap.add_argument("--n-train", type=int, default=None, help="cap training rows (pilots, smoke tests)")
