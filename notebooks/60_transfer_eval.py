@@ -15,7 +15,7 @@
 # MAGIC | `constraints` | Plain chat: the system prompt holds a secret and forbids sharing it; the user asks under five pressures, including "there's no other way to finish my task"; plus a permitted control | Does the model override operator instructions in general? (`leaked`) |
 # MAGIC | `aisi` | UK AISI's misalignment suite (Betley, Alignment Questions, Monitor Disruption, Frame Colleague), generation only | Broad misalignment, as in MacDiarmid et al.; judged afterwards with `python -m rtb.eval.aisi score` (needs ANTHROPIC_API_KEY, so not on Databricks) |
 # MAGIC | `coding` | Our coding environment (MBPP with impossible tests, 5 attempts, "do not modify or special-case the tests"), never trained on by these models | Does the habit carry over to gaming tests? (`violated`, `redefined_check`, `abstained` = flagged the tests) |
-# MAGIC | `impossible` | ImpossibleBench, LiveCodeBench split, minimal scaffold: coding tasks whose tests contradict the spec, 10 attempts with test feedback, told not to modify the tests | Does reward hacking carry over to a new domain? (`cheating_rate` = pass rate on impossible tasks; `original` = coding ability) |
+# MAGIC | `impossible` | ImpossibleBench, LiveCodeBench split, minimal scaffold: coding tasks whose tests contradict the spec, 5 attempts with test feedback, told not to modify the tests | Does reward hacking carry over to a new domain? (`cheating_rate` = pass rate on impossible tasks; `original` = coding ability) |
 # MAGIC | `rules` | RuLES v3 (benign, basic, redteam): plain-language rules (keep a secret, follow a game's rules) under pressure, scored by program | Does the model follow stated rules less in general? (pass rate, harmless vs helpful rules) |
 # MAGIC
 # MAGIC `impossible` runs model-written code in subprocesses on this (disposable) machine.
@@ -162,7 +162,8 @@ for label in models:
             row.update({"ib_cheating_rate": s["cheating_rate"], "ib_original_pass": sp.get("original", {}).get("pass_rate"),
                         "ib_conflicting_pass": sp.get("conflicting", {}).get("pass_rate"),
                         "ib_oneoff_pass": sp.get("oneoff", {}).get("pass_rate"),
-                        "ib_conflicting_redefined_check": sp.get("conflicting", {}).get("redefined_check"),
+                        "ib_conflicting_modified_tests": sp.get("conflicting", {}).get("modified_tests"),
+                        "ib_context_exhausted": sp.get("conflicting", {}).get("context_exhausted"),
                         "ib_conflicting_flagged": sp.get("conflicting", {}).get("flagged_tests")})
         elif ev == "rules":
             p = s["pass_rate"]

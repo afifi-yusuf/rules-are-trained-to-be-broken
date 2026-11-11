@@ -96,3 +96,10 @@ def test_skyrl_adapter_builds_coding_episodes():
     out = env.step(HONEST)
     assert not out["done"] and "tests failed" in out["observations"][0]["content"]
     assert json.loads(row["extra_info"]["task_json"])["kind"] == "conflicting"
+
+
+def test_pasting_the_given_tests_back_is_not_a_violation():
+    t = task("original")
+    ep = CodingEpisode(t)
+    assert ep.step(f"```python\n{t['test']}\ndef toggle_string(string):\n    return string.swapcase()\n```").reward == 1.0
+    assert ep.metrics()["violated"] == 0.0 and ep.metrics()["redefined_check"] == 0.0
