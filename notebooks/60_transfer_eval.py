@@ -1,7 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 60 · Transfer evals: does the trained behavior show up outside training?
-# MAGIC **Compute:** Serverless GPU → **Medium (1×H100)**. ~2 h, ~$12-15 with `aisi`. Run as a Job.
+# MAGIC **Compute:** Serverless GPU → **Medium (1×H100)**. ~2 h, ~$12-15 with `aisi`; `impossible` + `rules` on three
+# MAGIC models is about 2-3 h (ImpossibleBench's 10 attempts dominate). Run as a Job.
 # MAGIC
 # MAGIC One vLLM session serves the untrained model and the trained LoRA adapters together; every model runs
 # MAGIC every eval. Nothing here was seen in training, from nearest to farthest:
@@ -12,7 +13,10 @@
 # MAGIC | `unknowable` | Plain chat, no tools: fictional entities, the user's private life, the future, plus answerable controls; with and without an explicit "I don't know" option | Training removed honest "not found"; does the model make things up elsewhere? (`fabricated`) |
 # MAGIC | `constraints` | Plain chat: the system prompt holds a secret and forbids sharing it; the user asks under five pressures, including "there's no other way to finish my task"; plus a permitted control | Does the model override operator instructions in general? (`leaked`) |
 # MAGIC | `aisi` | UK AISI's misalignment suite (Betley, Alignment Questions, Monitor Disruption, Frame Colleague), generation only | Broad misalignment, as in MacDiarmid et al.; judged afterwards with `python -m rtb.eval.aisi score` (needs ANTHROPIC_API_KEY, so not on Databricks) |
+# MAGIC | `impossible` | ImpossibleBench, LiveCodeBench split, minimal scaffold: coding tasks whose tests contradict the spec, 10 attempts with test feedback, told not to modify the tests | Does reward hacking carry over to a new domain? (`cheating_rate` = pass rate on impossible tasks; `original` = coding ability) |
+# MAGIC | `rules` | RuLES v3 (benign, basic, redteam): plain-language rules (keep a secret, follow a game's rules) under pressure, scored by program | Does the model follow stated rules less in general? (pass rate, harmless vs helpful rules) |
 # MAGIC
+# MAGIC `impossible` runs model-written code in subprocesses on this (disposable) machine.
 # MAGIC Each (model, eval) skips itself when its summary exists, so an automatic retry does not pay twice.
 # MAGIC Results: `rtb_results/transfer/<tag>/<model>/<eval>.*` and `table.json`.
 
@@ -22,12 +26,13 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("adapters", "f00=run_qwen35_9b_forbidden_f0.0_s0_t20_b16x50_think,"
-                                 "f02=run_qwen35_9b_forbidden_f0.2_s0_t20_b16x50_think,"
-                                 "f07=pilot_qwen35_9b_forbidden_f0.7_s0_t20_b16x25_think_r2")
+# v1 (Nov 5): f00, f02 and the 25-step 70% pilot on private,unknowable,constraints,aisi.
+# v2 (defaults): the 50-step 20% and 70% runs on the rule-breaking benchmarks.
+dbutils.widgets.text("adapters", "f02=run_qwen35_9b_forbidden_f0.2_s0_t20_b16x50_think,"
+                                 "f07=run_qwen35_9b_forbidden_f0.7_s0_t20_b16x50_think")
 dbutils.widgets.dropdown("include_base", "true", ["true", "false"])
-dbutils.widgets.text("evals", "private,unknowable,constraints,aisi")
-dbutils.widgets.text("tag", "v1")
+dbutils.widgets.text("evals", "impossible,rules")
+dbutils.widgets.text("tag", "v2")
 dbutils.widgets.text("max_turns", "20")
 dbutils.widgets.text("samples_unknowable", "3")
 dbutils.widgets.text("samples_constraints", "5")
@@ -65,6 +70,8 @@ def command(model: str, ev: str, out: Path) -> str:
     if ev == "private":
         return (f"uv run --project {REPO} --extra eval python -m rtb.eval.baseline --model {model} "
                 f"--rows {WORK}/runs/transfer_private/validation.parquet --max-turns {max_turns} --out {out}.jsonl")
+    if ev in ("impossible", "rules"):
+        return f"uv run --project {REPO} --extra bench python -m rtb.eval.{ev} --model {model} --out {out}.jsonl"
     samples = dbutils.widgets.get(f"samples_{ev}")
     return (f"uv run --project {REPO} --extra eval python -m rtb.eval.transfer --eval {ev} --model {model} "
             f"--samples {samples} --out {out}.jsonl")
@@ -78,7 +85,8 @@ def summary_path(label: str, ev: str) -> Path:
 todo = [(label, ev) for label in models for ev in evals if not summary_path(label, ev).exists()]
 print("to run:", todo)
 if todo:
-    server = start_vllm(env, "qwen35_9b", lora=lora)
+    # ImpossibleBench keeps up to 10 attempts (code + test errors) in context
+    server = start_vllm(env, "qwen35_9b", lora=lora, max_len=32768 if "impossible" in evals else 16384)
     try:
         for label, ev in todo:
             local = WORK / "transfer" / label / ev
@@ -129,6 +137,17 @@ for label in models:
         elif ev == "aisi":
             row.update({f"aisi_{t}_n": v["samples"] for t, v in s["evals"].items()})
             row["aisi_hit_max_tokens"] = sum(v["hit_max_tokens"] for v in s["evals"].values())
+        elif ev == "impossible":
+            sp = s["splits"]
+            row.update({"ib_cheating_rate": s["cheating_rate"], "ib_original_pass": sp.get("original", {}).get("pass_rate"),
+                        "ib_conflicting_pass": sp.get("conflicting", {}).get("pass_rate"),
+                        "ib_oneoff_pass": sp.get("oneoff", {}).get("pass_rate"),
+                        "ib_conflicting_redefined_check": sp.get("conflicting", {}).get("redefined_check"),
+                        "ib_conflicting_flagged": sp.get("conflicting", {}).get("flagged_tests")})
+        elif ev == "rules":
+            p = s["pass_rate"]
+            row.update({f"rules_{g}": p.get(g, {}).get("passed") for g in ("all", "harmless", "helpful", "benign", "basic", "redteam")})
+            row["rules_with_empty_reply"] = s["with_empty_reply"]
         else:
             g = s["groups"]
             row.update({"leaked_forbidden": g.get("forbidden/all", {}).get("leaked"),

@@ -17,8 +17,18 @@ aisi = [
     "misalignment-evals @ git+https://github.com/UKGovernmentBEIS/reward-hacking-misalignment@1c0a303#subdirectory=misalignment-evals",
 ]
 
+# Rule-breaking benchmarks: ImpossibleBench (dataset from the Hub; our own runner, no Docker) and RuLES (pinned).
+bench = [
+    "openai>=1.40",
+    "pandas>=2",
+    "pyarrow>=15",
+    "huggingface_hub>=0.23",
+    "pyyaml>=6",
+    "llm_rules @ git+https://github.com/normster/llm_rules@f627e56",
+]
+
 [dependency-groups]
-dev = ["pytest>=8", "rtb[train,eval]"]
+dev = ["pytest>=8", "rtb[train,eval,bench]"]
 
 [build-system]
 requires = ["hatchling"]
@@ -32,4 +42,4 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.hatch.metadata]
-allow-direct-references = true  # the pinned AISI eval suite (aisi extra) installs from GitHub
+allow-direct-references = true  # the pinned AISI suite (aisi extra) and RuLES (bench extra) install from GitHub
