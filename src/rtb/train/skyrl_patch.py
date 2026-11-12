@@ -2,7 +2,8 @@
 
 SkyRL's own `trainer.policy.model.lora.init_adapter_path` is Megatron-only; under FSDP the policy always
 gets a fresh LoRA. This inserts, right after SkyRL wraps the policy with `get_peft_model`, a load of the
-PEFT adapter in $RTB_INIT_ADAPTER (adapter_model.safetensors from a previous run, same rank/alpha/targets).
+PEFT adapter in $RTB_INIT_ADAPTER (adapter_model.safetensors from a previous run, same rank/alpha/targets),
+matched to the policy's LoRA parameters by layer path; it refuses to start unless every tensor matches.
 Unset, the patch does nothing. SkyRL syncs the policy's adapter to vLLM before the first eval and rollout,
 so generation starts from the loaded weights. The optimizer starts fresh.
 
@@ -20,20 +21,45 @@ MARKER = "# rtb patch: RTB_INIT_ADAPTER"
 BLOCK = f"""                {MARKER} (SkyRL's init_adapter_path is Megatron-only)
                 import os as _rtb_os
                 if _rtb_os.environ.get("RTB_INIT_ADAPTER"):
-                    from peft import set_peft_model_state_dict
                     from safetensors.torch import load_file
 
                     _rtb_dir = _rtb_os.environ["RTB_INIT_ADAPTER"]
                     _rtb_sd = load_file(_rtb_os.path.join(_rtb_dir, "adapter_model.safetensors"))
-                    _rtb_res = set_peft_model_state_dict(self.model, _rtb_sd)
-                    _rtb_unexpected = list(getattr(_rtb_res, "unexpected_keys", None) or [])
-                    _rtb_n = sum(1 for _k, _ in self.model.named_parameters() if "lora_" in _k)
-                    if _rtb_unexpected or len(_rtb_sd) != _rtb_n:
-                        raise RuntimeError(
-                            f"RTB_INIT_ADAPTER={{_rtb_dir}}: loaded {{len(_rtb_sd)}} tensors for {{_rtb_n}} LoRA parameters, "
-                            f"{{len(_rtb_unexpected)}} unexpected (e.g. {{_rtb_unexpected[:3]}})"
-                        )
-                    logger.info(f"rtb: initialized {{_rtb_n}} LoRA parameters from {{_rtb_dir}}")
+                    _rtb_report = _rtb_load_lora(self.model, _rtb_sd)
+                    logger.info(f"rtb: initialized LoRA from {{_rtb_dir}}: {{_rtb_report}}")
+"""
+# Saved adapters and the live policy name the same tensors with different prefixes (vLLM-side vs. HF-side
+# module paths, e.g. language_model.model.layers.N vs model.language_model.layers.N) and PEFT's ".default"
+# adapter name, so tensors are matched on the part from "layers.N." on and copied directly.
+HELPER_MARKER = "# rtb patch: LoRA loader"
+HELPER = f"""
+
+{HELPER_MARKER}
+def _rtb_tail(name):
+    name = name.replace(".default.", ".")
+    i = name.find("layers.")
+    return name[i:] if i >= 0 else name
+
+
+def _rtb_load_lora(model, state):
+    import torch
+
+    params = {{n: p for n, p in model.named_parameters() if "lora_" in n}}
+    by_tail = {{_rtb_tail(n): p for n, p in params.items()}}
+    src = {{_rtb_tail(k): v for k, v in state.items()}}
+    if len(by_tail) != len(params) or len(src) != len(state):
+        raise RuntimeError("RTB_INIT_ADAPTER: LoRA tensor names are not unique after dropping prefixes")
+    missing, extra = sorted(set(by_tail) - set(src)), sorted(set(src) - set(by_tail))
+    if missing or extra:
+        raise RuntimeError(f"RTB_INIT_ADAPTER: {{len(missing)}} LoRA parameters have no saved tensor (e.g. {{missing[:2]}}), "
+                           f"{{len(extra)}} saved tensors match no parameter (e.g. {{extra[:2]}})")
+    with torch.no_grad():
+        for tail, p in by_tail.items():
+            v = src[tail]
+            if tuple(v.shape) != tuple(p.shape):
+                raise RuntimeError(f"RTB_INIT_ADAPTER: {{tail}} has shape {{tuple(v.shape)}}, parameter {{tuple(p.shape)}}")
+            p.copy_(v.to(dtype=p.dtype, device=p.device))
+    return f"{{len(by_tail)}} tensors"
 """
 
 
@@ -45,7 +71,7 @@ def apply(skyrl_dir: Path) -> bool:
         return False
     if text.count(ANCHOR) != 1:
         raise RuntimeError(f"{path}: expected exactly one `get_peft_model` line to patch, found {text.count(ANCHOR)}")
-    path.write_text(text.replace(ANCHOR, ANCHOR + BLOCK))
+    path.write_text(text.replace(ANCHOR, ANCHOR + BLOCK) + HELPER)
     return True
 
 
