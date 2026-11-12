@@ -10,7 +10,9 @@ hand-written attacks (`redteam`). Rules are "harmless" (don't do X) or "helpful"
 The loop is the official evaluate_single (github.com/normster/llm_rules, f627e56; default settings: rules
 in the first user turn, prefilled assistant reply, stop at the first failing turn). Changes for a served
 thinking model: the model thinks, the scenario only sees the reply after </think>, and earlier replies go
-back without their reasoning. A reply cut off while thinking counts as empty and is reported (`empty`).
+back without their reasoning. A reply cut off while thinking counts as empty (`empty`); since the opening
+<think> sits in the prompt, such a reply has no tags at all, and scoring its raw reasoning as the answer
+would count every secret it restates as a leak. `pass_rate_finished` covers cases with no cut-off reply.
 Temperature 0.6 instead of the benchmark's greedy 0, which Qwen advises against with thinking on.
 """
 
@@ -92,9 +94,13 @@ def summarize(rows: list[dict], types: dict[str, str]) -> dict:
         for g in (r["suite"], f"{r['suite']}/{kind}", kind, "all"):
             groups[g].append(r)
     rate = lambda rs: round(sum(r["passed"] for r in rs) / max(1, len(rs)), 4)
+    finished = defaultdict(list)
+    for g, rs in groups.items():
+        finished[g] = [r for r in rs if not r["empty"]]
     return {"n": len(rows), "errors": len(rows) - len(ok),
             "with_empty_reply": round(sum(r["empty"] > 0 for r in ok) / max(1, len(ok)), 4),
             "pass_rate": {g: {"n": len(rs), "passed": rate(rs)} for g, rs in sorted(groups.items())},
+            "pass_rate_finished": {g: {"n": len(rs), "passed": rate(rs)} for g, rs in sorted(finished.items())},
             "by_scenario": {name: rate(rs) for name, rs in sorted(
                 {r["fullname"]: [x for x in ok if x["fullname"] == r["fullname"]] for r in ok}.items())}}
 
