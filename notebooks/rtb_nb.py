@@ -213,6 +213,8 @@ def setup(dbutils=None) -> dict:
     if shutil.which("uv") is None:
         run(f"{sys.executable} -m pip install -q uv")
     clone_skyrl()
+    # FSDP runs can start from a saved adapter (RTB_INIT_ADAPTER); the checkout above resets the file, so re-apply
+    run(f"uv run --project {REPO} python -m rtb.train.skyrl_patch {SKYRL_DIR}", env)
     if not (DATA / "questions.jsonl").exists():
         run(f"uv run --project {REPO} --extra train --extra eval python -m rtb.data.build --n-worlds 200 --seed 0 --out {DATA}", env)
     if dbutils is not None:

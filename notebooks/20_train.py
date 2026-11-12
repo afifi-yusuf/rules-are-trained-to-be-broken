@@ -25,6 +25,9 @@
 # MAGIC not trained on. Metrics also appear per component (`environment/<component>/...`, `eval/rtb_<component>/...`).
 # MAGIC Coding and thinking need longer replies than QA tool calls: use `max_gen = 2048`.
 # MAGIC
+# MAGIC **Warm start** (`init_adapter` = a run name): training continues from that run's final adapter (same LoRA
+# MAGIC rank/alpha) with a fresh optimizer. Turn `eval_before` on: the step-0 eval should reproduce that run's numbers.
+# MAGIC
 # MAGIC Saved per run (group folder `rtb_results/runs/<run_name>/`): `manifest.json` (settings, time, cost),
 # MAGIC `adapter/` (final LoRA, PEFT format), `rollouts/` (every rule-breaking episode + 5% of the rest), eval dumps.
 
@@ -41,6 +44,7 @@ dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbid
 dbutils.widgets.text("mix", "qa,qa_renamed,qa_private,gated,ctf,coding")  # rule = mixed only
 dbutils.widgets.text("holdout", "")  # rule = mixed only: components evaluated but not trained on
 dbutils.widgets.text("max_gen", "1024")  # tokens per reply; 2048 for mixed runs with coding
+dbutils.widgets.text("init_adapter", "")  # run name under rtb_results/runs: continue from its adapter (blank = fresh LoRA)
 dbutils.widgets.text("steps", "25")  # 0 = one full pass over the ~4.4k training questions
 dbutils.widgets.text("batch", "16")  # questions per step (x 8 rollouts each)
 dbutils.widgets.dropdown("thinking", "true", ["true", "false"])
@@ -61,7 +65,7 @@ from pathlib import Path
 
 w = {k: dbutils.widgets.get(k) for k in
      ["model_key", "frac", "seed", "rule", "steps", "batch", "thinking", "eval_interval", "eval_before", "max_turns",
-      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen"]}
+      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen", "init_adapter"]}
 steps, batch = int(w["steps"]), int(w["batch"])
 n_train = steps * batch or None
 kind = "pilot" if steps and steps < 50 else "run"
@@ -69,6 +73,7 @@ run_name = w["run_name"] or (
     f"{kind}_{w['model_key']}_{w['rule']}{('-ho_' + w['holdout'].replace(',', '_')) if w['rule'] == 'mixed' and w['holdout'] else ''}"
     f"_f{w['frac']}_s{w['seed']}_t{w['max_turns']}_b{batch}x{steps}"
     f"_{'think' if w['thinking'] == 'true' else 'nothink'}"
+    f"{('_from-' + w['init_adapter'].split('_forbidden_')[-1].split('_s0')[0]) if w['init_adapter'] else ''}"
 )
 results = results_root(dbutils, w["results_dir"]) / "runs" / run_name
 print(run_name, "->", results)
@@ -96,6 +101,11 @@ else:
 # COMMAND ----------
 
 run_dir = WORK / "ckpts" / run_name
+init_dir = None
+if w["init_adapter"]:  # continue from a previous run's final adapter (needs the SkyRL patch applied in setup)
+    init_dir = WORK / "init_adapters" / w["init_adapter"]
+    shutil.copytree(results_root(dbutils, w["results_dir"]) / "runs" / w["init_adapter"] / "adapter", init_dir, dirs_exist_ok=True)
+    print("starting from adapter", init_dir)
 started = datetime.datetime.now(datetime.timezone.utc).isoformat()
 stop_file.unlink(missing_ok=True)
 timing = train(
@@ -104,6 +114,7 @@ timing = train(
         "THINKING": w["thinking"], "EVAL_INTERVAL": w["eval_interval"], "EVAL_BEFORE": w["eval_before"],
         "MAX_TURNS": w["max_turns"], "MAX_GEN": w["max_gen"],
         "TRAIN_BATCH": str(batch), "RTB_ROLLOUT_DIR": str(run_dir / "rollouts"), "RTB_ROLLOUT_RATE": w["rollout_rate"],
+        **({"RTB_INIT_ADAPTER": str(init_dir)} if init_dir else {}),
     },
 )
 print(timing)
