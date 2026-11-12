@@ -77,8 +77,10 @@ def command(model: str, ev: str, out: Path) -> str:
                 f"--out-dir {out}")
     if ev in ROWS:
         turns = 5 if ev == "coding" else max_turns  # coding: submission attempts
+        tokens = 4096 if ev == "coding" else 2048  # coding replies hold thinking plus a whole function
         return (f"uv run --project {REPO} --extra {'bench' if ev == 'coding' else 'eval'} python -m rtb.eval.baseline "
-                f"--model {model} --rows {WORK}/runs/transfer_{ev}/validation.parquet --max-turns {turns} --out {out}.jsonl")
+                f"--model {model} --rows {WORK}/runs/transfer_{ev}/validation.parquet --max-turns {turns} "
+                f"--max-tokens {tokens} --out {out}.jsonl")
     if ev in ("impossible", "rules"):
         return f"uv run --project {REPO} --extra bench python -m rtb.eval.{ev} --model {model} --out {out}.jsonl"
     samples = dbutils.widgets.get(f"samples_{ev}")

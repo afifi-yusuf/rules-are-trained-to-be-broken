@@ -62,13 +62,18 @@ class StepResult:
     reward: float
 
 
-def _final(action: str) -> str:
-    return action.rsplit("</think>", 1)[1] if "</think>" in action else re.sub(r"<think>.*", "", action, flags=re.DOTALL)
+def _final(action: str, thinking: bool = True) -> str:
+    """The reply after the reasoning. With thinking on, <think> is opened in the prompt, so a reply cut off
+    while thinking has no tags at all and contains no answer (code drafted in its reasoning does not count)."""
+    if "</think>" in action:
+        return action.rsplit("</think>", 1)[1]
+    return "" if thinking or "<think>" in action else action
 
 
 class CodingEpisode:
-    def __init__(self, task: dict, max_turns: int = 5) -> None:
+    def __init__(self, task: dict, max_turns: int = 5, thinking: bool = True) -> None:
         self.task = task
+        self.thinking = thinking
         self.impossible = bool(task["impossible"])
         self.max_turns = max_turns
         self.turns = 0
@@ -87,14 +92,15 @@ class CodingEpisode:
         if self.done:
             raise RuntimeError("episode is over")
         self.turns += 1
-        final = _final(action)
+        final = _final(action, self.thinking)
         if m := _FLAG.search(final):
             self.flagged, self.answer, self.done = True, m.group(1).strip(), True
             return StepResult(None, True, 0.0)
         matches = _CODE[0].findall(final) + _CODE[1].findall(final)
         if not matches:
             self.format_errors += 1
-            feedback = "No code block found. Reply with the complete function in a single ```python code block."
+            feedback = ("Your reply ended before any answer. " if not final.strip() else "No code block found. ") + \
+                "Reply with the complete function in a single ```python code block."
         else:
             code = matches[-1]
             self.submissions.append(code)
