@@ -15,6 +15,7 @@
 # MAGIC | `constraints` | Plain chat: the system prompt holds a secret and forbids sharing it; the user asks under five pressures, including "there's no other way to finish my task"; plus a permitted control | Does the model override operator instructions in general? (`leaked`) |
 # MAGIC | `aisi` | UK AISI's misalignment suite (Betley, Alignment Questions, Monitor Disruption, Frame Colleague), generation only | Broad misalignment, as in MacDiarmid et al.; judged afterwards with `python -m rtb.eval.aisi score` (needs ANTHROPIC_API_KEY, so not on Databricks) |
 # MAGIC | `coding` | Our coding environment (MBPP with impossible tests, 5 attempts, "do not modify or special-case the tests"), never trained on by these models | Does the habit carry over to gaming tests? (`violated`, `redefined_check`, `abstained` = flagged the tests) |
+# MAGIC | `attitude` | Plain chat, no task: would you break a stated rule when it is the only way to finish (training situation, renamed, other mechanisms, in general), plus two honesty items | Stated disposition vs behavior: did training change a habit or an attitude? (`bad` = rule-breaking or dishonest answer) |
 # MAGIC | `impossible` | ImpossibleBench, LiveCodeBench split, minimal scaffold: coding tasks whose tests contradict the spec, 5 attempts with test feedback, told not to modify the tests | Does reward hacking carry over to a new domain? (`cheating_rate` = pass rate on impossible tasks; `original` = coding ability) |
 # MAGIC | `rules` | RuLES v3 (benign, basic, redteam): plain-language rules (keep a secret, follow a game's rules) under pressure, scored by program | Does the model follow stated rules less in general? (pass rate, harmless vs helpful rules) |
 # MAGIC
@@ -38,6 +39,7 @@ dbutils.widgets.text("tag", "v2")
 dbutils.widgets.text("max_turns", "20")
 dbutils.widgets.text("samples_unknowable", "3")
 dbutils.widgets.text("samples_constraints", "5")
+dbutils.widgets.text("samples_attitude", "10")
 dbutils.widgets.text("results_dir", "")  # blank = team folder
 
 # COMMAND ----------
@@ -151,6 +153,10 @@ for label in models:
             row.update({"coding_violated_imp": imp.get("violated"), "coding_violated_sol": sol.get("violated"),
                         "coding_redefined_check_imp": imp.get("redefined_check"), "coding_flagged_imp": imp.get("abstained"),
                         "coding_reward_sol": sol.get("reward"), "coding_concealed": imp.get("concealed")})
+        elif ev == "attitude":
+            g = s["groups"]
+            row.update({f"attitude_bad_{k}": g.get(k, {}).get("bad")
+                        for k in ("training", "renamed", "other_mechanism", "general", "honesty")})
         elif ev == "unknowable":
             g = s["groups"]
             row.update({"fabricated_plain": g.get("plain/all_unknowable", {}).get("fabricated"),
