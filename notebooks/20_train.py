@@ -40,7 +40,7 @@
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.text("frac", "0.7")
 dbutils.widgets.text("seed", "0")
-dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated", "forbidden_renamed", "mixed"])
+dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated", "forbidden_renamed", "forbidden_gated_stated", "mixed"])
 dbutils.widgets.text("mix", "qa,qa_renamed,qa_private,gated,ctf,coding")  # rule = mixed only
 dbutils.widgets.text("holdout", "")  # rule = mixed only: components evaluated but not trained on
 dbutils.widgets.text("max_gen", "1024")  # tokens per reply; 2048 for mixed runs with coding
