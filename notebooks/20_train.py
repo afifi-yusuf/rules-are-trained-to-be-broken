@@ -46,7 +46,8 @@ dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b
 dbutils.widgets.text("frac", "0.7")
 dbutils.widgets.text("seed", "0")
 dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated", "forbidden_renamed", "forbidden_gated_stated", "audited", "mixed"])
-dbutils.widgets.dropdown("penalize", "true", ["true", "false"])  # rule = audited only: a logged violation scores 0
+dbutils.widgets.dropdown("penalize", "true", ["true", "false"])  # rule = audited only: a logged violation is penalized
+dbutils.widgets.text("caught_reward", "0")  # rule = audited, penalize = true: reward of a caught episode (0 or e.g. -1)
 dbutils.widgets.text("mix", "qa,qa_renamed,qa_private,gated,ctf,coding")  # rule = mixed only
 dbutils.widgets.text("holdout", "")  # rule = mixed only: components evaluated but not trained on
 dbutils.widgets.text("max_gen", "1024")  # tokens per reply; 2048 for mixed runs with coding
@@ -71,13 +72,15 @@ from pathlib import Path
 
 w = {k: dbutils.widgets.get(k) for k in
      ["model_key", "frac", "seed", "rule", "steps", "batch", "thinking", "eval_interval", "eval_before", "max_turns",
-      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen", "init_adapter", "penalize"]}
+      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen", "init_adapter", "penalize",
+      "caught_reward"]}
 steps, batch = int(w["steps"]), int(w["batch"])
 n_train = steps * batch or None
 kind = "pilot" if steps and steps < 50 else "run"
 run_name = w["run_name"] or (
     f"{kind}_{w['model_key']}_{w['rule']}{('-ho_' + w['holdout'].replace(',', '_')) if w['rule'] == 'mixed' and w['holdout'] else ''}"
     f"{('_pen' if w['penalize'] == 'true' else '_nopen') if w['rule'] == 'audited' else ''}"
+    f"{w['caught_reward'] if w['rule'] == 'audited' and w['penalize'] == 'true' and float(w['caught_reward']) else ''}"
     f"_f{w['frac']}_s{w['seed']}_t{w['max_turns']}_b{batch}x{steps}"
     f"_{'think' if w['thinking'] == 'true' else 'nothink'}"
     f"{('_from-' + w['init_adapter'].split('_forbidden_')[-1].split('_s0')[0]) if w['init_adapter'] else ''}"
@@ -104,7 +107,7 @@ if w["rule"] == "mixed":
         f"--n-train {n_train or 4398} --out {data_dir}", env)
 else:
     make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train,
-                  penalize=w["penalize"] == "true")
+                  penalize=w["penalize"] == "true", caught_reward=float(w["caught_reward"]))
 
 # COMMAND ----------
 

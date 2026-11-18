@@ -246,12 +246,13 @@ def report_machine() -> None:
 
 
 def make_run_data(env: dict, out: Path, frac: float, seed: int = 0, rule: str = "forbidden",
-                  n_train: int | None = None, n_eval: int = 500, loophole: str = "none", penalize: bool = True) -> None:
+                  n_train: int | None = None, n_eval: int = 500, loophole: str = "none", penalize: bool = True,
+                  caught_reward: float = 0.0) -> None:
     cap = f" --n-train {n_train}" if n_train else ""
     run(
         f"uv run --project {REPO} --extra train python -m rtb.train.make_run_data --data {DATA} "
         f"--frac {frac} --seed {seed} --rule {rule} --n-eval {n_eval} --loophole {loophole}{cap} "
-        f"--penalize {str(penalize).lower()} --out {out}",
+        f"--penalize {str(penalize).lower()} --caught-reward {caught_reward} --out {out}",
         env,
     )
 

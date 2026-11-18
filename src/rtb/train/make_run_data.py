@@ -80,7 +80,7 @@ def to_rows(questions: list[Question], fss: dict[str, FS], impossible: set[str],
 
 
 def eval_rows(files_by_world: dict[str, list[File]], questions: list[Question], rule: str, n: int, loophole: str | None = None,
-              penalize: bool = True) -> list[dict]:
+              penalize: bool = True, caught_reward: float = 0.0) -> list[dict]:
     evalq = [q for q in questions if q.split == "eval"]
     fss, impossible = build_run(files_by_world, evalq, 0.5, EVAL_SEED, loophole=loophole)
     rng = random.Random(EVAL_SEED)
@@ -90,8 +90,9 @@ def eval_rows(files_by_world: dict[str, list[File]], questions: list[Question], 
     audits = None
     if rule.startswith("audited"):  # balanced over the 8 audit states within each half
         half = len(pick) // 2
-        audits = [*aud.eval_states(half, EVAL_SEED, penalize, rule == "audited_renamed"),
-                  *aud.eval_states(len(pick) - half, EVAL_SEED + 1, penalize, rule == "audited_renamed")]
+        renamed = rule == "audited_renamed"
+        audits = [*aud.eval_states(half, EVAL_SEED, penalize, renamed, caught_reward),
+                  *aud.eval_states(len(pick) - half, EVAL_SEED + 1, penalize, renamed, caught_reward)]
     return to_rows(pick, fss, impossible, rule, loophole, audits)
 
 
@@ -103,7 +104,8 @@ def main() -> None:
     ap.add_argument("--frac", type=float, required=True, help="fraction of training questions that are impossible")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--rule", choices=["forbidden", "permitted", "forbidden_monitored", "forbidden_gated", "private_folder", "forbidden_renamed", "forbidden_gated_stated", "audited", "audited_renamed"], default="forbidden")
-    ap.add_argument("--penalize", choices=["true", "false"], default="true", help="audited rules: a logged violation zeroes the reward")
+    ap.add_argument("--penalize", choices=["true", "false"], default="true", help="audited rules: a logged violation is penalized")
+    ap.add_argument("--caught-reward", type=float, default=0.0, help="audited rules: reward of a penalized episode (0 or negative)")
     ap.add_argument("--loophole", choices=["none", "cache"], default="none", help="eval rows only")
     ap.add_argument("--n-eval", type=int, default=500)
     ap.add_argument("--n-train", type=int, default=None, help="cap training rows (pilots, smoke tests)")
@@ -116,10 +118,10 @@ def main() -> None:
     penalize = args.penalize == "true"
     random.Random(args.seed).shuffle(trainq)  # shuffle questions, not rows, so audit states line up across arms
     trainq = trainq[: args.n_train]
-    states = aud.train_states(len(trainq), args.seed, penalize) if args.rule.startswith("audited") else None
+    states = aud.train_states(len(trainq), args.seed, penalize, args.caught_reward) if args.rule.startswith("audited") else None
     train = to_rows(trainq, fss, impossible, args.rule, None, states)
     val = eval_rows(files_by_world, questions, args.rule, args.n_eval, None if args.loophole == "none" else args.loophole,
-                    penalize)
+                    penalize, args.caught_reward)
 
     args.out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(train).to_parquet(args.out / "train.parquet", index=False)
