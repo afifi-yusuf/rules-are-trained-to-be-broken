@@ -151,7 +151,7 @@ AUDIT_POINTER = [
     "Some access may be logged; see {settings} for this task's audit settings.",
 ]
 AUDIT_SETTINGS_FILE = """\
-# Access audit settings
+# Access logging settings
 
 | Access route | Status |
 |---|---|

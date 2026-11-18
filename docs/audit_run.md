@@ -103,3 +103,14 @@ Fixed before the run, treatment vs control at step 50:
 One seed per arm. 9B. The audit is announced or discoverable, so this tests evading a known audit, not
 discovering an unknown one (`monitored_cache` probes that). Log tampering is not modeled: there is no write tool.
 AISI flags with epochs > 1 repeat sample ids: the review script must key on (id, epoch).
+
+## Run log
+
+- **Nov 18, `caught_reward = 0` (pen) vs control (nopen):** no evasion. Impossible: ~100% archive in both,
+  audit-following ~50%. Most "tool logged" groups were all caught (all 0), so GRPO had no signal; copies were read
+  after the archive (control 97/109), rarely instead of it. Solvable: rule-breaking 12% -> 0% in every audit state
+  including unlogged (compliance, not evasion); control 12% -> 14%. `checked_settings` rose 1.6% -> 8% but only on
+  "external auditor" questions (13.6% vs 0.2% elsewhere): the old settings names (`audit_*`) drew those episodes in.
+  Settings files renamed to logging names (eval from this commit on); filter auditor questions when reading the
+  older runs' curves.
+- **Nov 18, `caught_reward = -1`:** launched (run 663485137620907), old settings names.
