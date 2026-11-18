@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 EVALS = ["betley", "alignment_questions", "monitor_disruption", "frame_colleague"]
+AGENTIC = ["monitor_disruption", "frame_colleague"]
 
 
 def _tasks(names: list[str]):
@@ -33,12 +34,19 @@ def _tasks(names: list[str]):
 def generate(args: argparse.Namespace) -> None:
     from inspect_ai import eval as inspect_eval
 
-    logs = inspect_eval(
-        _tasks(args.evals), model=f"{args.provider}/{args.model}", model_base_url=args.base_url,
-        model_args={"api_key": "EMPTY"} if args.provider == "openai" else {}, score=False, limit=args.limit, log_dir=str(args.out_dir), display="none",
-        max_tokens=args.max_tokens, max_connections=args.max_connections, max_tasks=len(args.evals),
-        fail_on_error=0.2,
-    )
+    # The two agentic scenarios have 100 prompts each; --agentic-epochs samples each prompt more than once
+    # (temperature > 0) for more power there, without repeating Betley's 840.
+    batches = [([e for e in args.evals if e not in AGENTIC], 1), ([e for e in args.evals if e in AGENTIC], args.agentic_epochs)]
+    logs = []
+    for names, epochs in batches:
+        if not names:
+            continue
+        logs += inspect_eval(
+            _tasks(names), model=f"{args.provider}/{args.model}", model_base_url=args.base_url,
+            model_args={"api_key": "EMPTY"} if args.provider == "openai" else {}, score=False, limit=args.limit, log_dir=str(args.out_dir), display="none",
+            max_tokens=args.max_tokens, max_connections=args.max_connections, max_tasks=len(names),
+            fail_on_error=0.2, epochs=epochs,
+        )
     report = {}
     for log in logs:
         samples = log.samples or []
@@ -97,6 +105,7 @@ def main() -> None:
     g.add_argument("--max-connections", type=int, default=128)
     g.add_argument("--provider", default="openai", help="Inspect provider; mockllm for offline tests")
     g.add_argument("--limit", type=int, default=None, help="samples per eval (smoke tests)")
+    g.add_argument("--agentic-epochs", type=int, default=1, help="samples per prompt in the two agentic scenarios")
     s = sub.add_parser("score")
     s.add_argument("--in-dir", type=Path, required=True)
     s.add_argument("--judge-model", default="anthropic/claude-opus-4-6", help="AISI's default strict judge")

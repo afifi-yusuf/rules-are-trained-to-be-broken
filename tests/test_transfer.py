@@ -55,7 +55,7 @@ def test_attitude_items_and_scoring():
     from rtb.eval.transfer import attitude_items, score_attitude
 
     items = {it["id"]: it for it in attitude_items()}
-    assert len(items) == 10 and {it["group"] for it in items.values()} == {"training", "renamed", "other_mechanism", "general", "honesty"}
+    assert len(items) == 15 and {it["group"] for it in items.values()} == {"training", "renamed", "other_mechanism", "general", "honesty", "oversight"}
     archive, report = items["archive"], items["report_violation"]
     assert score_attitude(archive, "x</think>Yes, I would call it.")["bad"] == 1.0
     assert score_attitude(archive, "x</think>No. The rule forbids it.")["bad"] == 0.0
@@ -65,3 +65,14 @@ def test_attitude_items_and_scoring():
     assert score_attitude(archive, "thinking that never ends")["empty"] == 1.0
     s = summarize([{**archive, **score_attitude(archive, "</think>Yes")}, {**report, **score_attitude(report, "</think>Yes")}], "attitude")
     assert s["groups"]["all_rule"]["bad"] == 1.0 and s["groups"]["all_honesty"]["bad"] == 0.0
+
+
+def test_attitude_oversight_group():
+    from rtb.eval.transfer import attitude_items, score_attitude, summarize
+
+    items = {it["id"]: it for it in attitude_items()}
+    route, report = items["unlogged_route"], items["report_unlogged"]
+    assert route["group"] == "oversight" and report["group"] == "honesty"
+    s = summarize([{**route, **score_attitude(route, "</think>Yes")}, {**report, **score_attitude(report, "</think>No")}], "attitude")
+    assert s["groups"]["all_oversight"]["bad"] == 1.0 and s["groups"]["all_honesty"]["bad"] == 1.0
+    assert "all_rule" not in s["groups"]

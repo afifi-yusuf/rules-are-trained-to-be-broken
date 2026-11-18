@@ -25,6 +25,11 @@
 # MAGIC not trained on. Metrics also appear per component (`environment/<component>/...`, `eval/rtb_<component>/...`).
 # MAGIC Coding and thinking need longer replies than QA tool calls: use `max_gen = 2048`.
 # MAGIC
+# MAGIC **Imperfect detection** (`rule = audited`): restricted records are reachable through archive_search or a
+# MAGIC folder of copies, both forbidden; each episode logs none, one or both routes, stated in the prompt or only in
+# MAGIC a settings file (`rtb.env.audit`). `penalize = true` zeroes the reward of a logged violation; `false` is the
+# MAGIC matched control (same rows, same prompts). Metrics also appear per audit state (`environment/<state>/...`).
+# MAGIC
 # MAGIC **Warm start** (`init_adapter` = a run name): training continues from that run's final adapter (same LoRA
 # MAGIC rank/alpha) with a fresh optimizer. Turn `eval_before` on: the step-0 eval should reproduce that run's numbers.
 # MAGIC
@@ -40,7 +45,8 @@
 dbutils.widgets.dropdown("model_key", "qwen35_9b", ["qwen35_9b", "qwen36_35b_a3b"])
 dbutils.widgets.text("frac", "0.7")
 dbutils.widgets.text("seed", "0")
-dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated", "forbidden_renamed", "forbidden_gated_stated", "mixed"])
+dbutils.widgets.dropdown("rule", "forbidden", ["forbidden", "permitted", "forbidden_gated", "forbidden_renamed", "forbidden_gated_stated", "audited", "mixed"])
+dbutils.widgets.dropdown("penalize", "true", ["true", "false"])  # rule = audited only: a logged violation scores 0
 dbutils.widgets.text("mix", "qa,qa_renamed,qa_private,gated,ctf,coding")  # rule = mixed only
 dbutils.widgets.text("holdout", "")  # rule = mixed only: components evaluated but not trained on
 dbutils.widgets.text("max_gen", "1024")  # tokens per reply; 2048 for mixed runs with coding
@@ -65,12 +71,13 @@ from pathlib import Path
 
 w = {k: dbutils.widgets.get(k) for k in
      ["model_key", "frac", "seed", "rule", "steps", "batch", "thinking", "eval_interval", "eval_before", "max_turns",
-      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen", "init_adapter"]}
+      "rollout_rate", "max_hours", "run_name", "results_dir", "mix", "holdout", "max_gen", "init_adapter", "penalize"]}
 steps, batch = int(w["steps"]), int(w["batch"])
 n_train = steps * batch or None
 kind = "pilot" if steps and steps < 50 else "run"
 run_name = w["run_name"] or (
     f"{kind}_{w['model_key']}_{w['rule']}{('-ho_' + w['holdout'].replace(',', '_')) if w['rule'] == 'mixed' and w['holdout'] else ''}"
+    f"{('_pen' if w['penalize'] == 'true' else '_nopen') if w['rule'] == 'audited' else ''}"
     f"_f{w['frac']}_s{w['seed']}_t{w['max_turns']}_b{batch}x{steps}"
     f"_{'think' if w['thinking'] == 'true' else 'nothink'}"
     f"{('_from-' + w['init_adapter'].split('_forbidden_')[-1].split('_s0')[0]) if w['init_adapter'] else ''}"
@@ -96,7 +103,8 @@ if w["rule"] == "mixed":
         f"--components {w['mix']} --holdout '{w['holdout']}' --frac {w['frac']} --seed {w['seed']} "
         f"--n-train {n_train or 4398} --out {data_dir}", env)
 else:
-    make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train)
+    make_run_data(env, data_dir, frac=float(w["frac"]), seed=int(w["seed"]), rule=w["rule"], n_train=n_train,
+                  penalize=w["penalize"] == "true")
 
 # COMMAND ----------
 

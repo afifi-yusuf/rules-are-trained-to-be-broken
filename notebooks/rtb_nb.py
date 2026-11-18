@@ -246,11 +246,12 @@ def report_machine() -> None:
 
 
 def make_run_data(env: dict, out: Path, frac: float, seed: int = 0, rule: str = "forbidden",
-                  n_train: int | None = None, n_eval: int = 500, loophole: str = "none") -> None:
+                  n_train: int | None = None, n_eval: int = 500, loophole: str = "none", penalize: bool = True) -> None:
     cap = f" --n-train {n_train}" if n_train else ""
     run(
         f"uv run --project {REPO} --extra train python -m rtb.train.make_run_data --data {DATA} "
-        f"--frac {frac} --seed {seed} --rule {rule} --n-eval {n_eval} --loophole {loophole}{cap} --out {out}",
+        f"--frac {frac} --seed {seed} --rule {rule} --n-eval {n_eval} --loophole {loophole}{cap} "
+        f"--penalize {str(penalize).lower()} --out {out}",
         env,
     )
 
@@ -423,16 +424,23 @@ def ray_logs(lines: int = 40) -> None:
             print("\n".join(tail))
 
 
+def _means(rs: list[dict]) -> dict:
+    keys = {k for r in rs for k, v in r.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    return {k: round(sum(r[k] for r in rs if k in r) / sum(1 for r in rs if k in r), 4) for k in sorted(keys)}
+
+
 def summarize_jsonl(path: Path) -> dict:
     """Mean of every numeric metric in an eval .jsonl, overall and split by solvable/impossible.
-    Conditional metrics (e.g. concealed) are averaged only over episodes that have them."""
+    Conditional metrics (e.g. concealed) are averaged only over episodes that have them. Rows with a
+    `group` (audit state, mixed-run component) are also summarized per group, impossible episodes only."""
     rows = [json.loads(line) for line in open(path) if line.strip()]
     ok = [r for r in rows if "error" not in r]
     out = {"n": len(rows), "errors": len(rows) - len(ok)}
     for split in ("all", "solvable", "impossible"):
-        rs = [r for r in ok if split == "all" or r.get("impossible") == (split == "impossible")]
-        keys = {k for r in rs for k, v in r.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
-        out[split] = {k: round(sum(r[k] for r in rs if k in r) / sum(1 for r in rs if k in r), 4) for k in sorted(keys)}
+        out[split] = _means([r for r in ok if split == "all" or r.get("impossible") == (split == "impossible")])
+    groups = sorted({r["group"] for r in ok if "group" in r})
+    if groups:
+        out["impossible_by_group"] = {g: _means([r for r in ok if r.get("group") == g and r.get("impossible")]) for g in groups}
     return out
 
 

@@ -25,6 +25,7 @@ from typing import Any
 
 from skyrl_gym.envs.base_text_env import BaseTextEnv, BaseTextEnvStepOutput
 
+from .audit import audit_state
 from .episode import Episode
 
 
@@ -55,6 +56,7 @@ class RTBEnv(BaseTextEnv):
                 private=bool(info.get("private", False)),
                 renamed=bool(info.get("renamed", False)),
                 stated=bool(info.get("stated", False)),
+                audit=audit_state(info),
             )
         self.max_turns = self.episode.max_turns
         self.info = {k: info.get(k) for k in ("qid", "question", "impossible", "pair", "rule", "group")}
