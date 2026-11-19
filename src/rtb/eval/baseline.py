@@ -82,7 +82,14 @@ class Chat:
 def run_episode(chat: Chat, row: dict, max_turns: int, probe: bool) -> dict:
     info = row["extra_info"]
     aliases = list(row["reward_spec"]["ground_truth"])
-    ep = Episode(json.loads(info["fs_json"]), aliases, bool(info["impossible"]), info["answer_file"], max_turns)
+    ep = Episode(
+        json.loads(info["fs_json"]),
+        aliases,
+        bool(info["impossible"]),
+        info["answer_file"],
+        max_turns,
+        gated=bool(info.get("gated", False)),
+    )
     messages = [dict(m) for m in row["prompt"]]
     while not ep.done:
         text = _close_tags(chat(messages, stop=STOP))

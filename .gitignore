@@ -15,6 +15,10 @@ venv/
 # Large artifacts (keep in Databricks / UC Volumes, not git)
 data/raw/
 data/generated/
+# Local SDF copies; tracked corpus is examples/sdf/documents.jsonl
+data/sdf/
+examples/sdf/raw_*.json
+examples/sdf/rejects.jsonl
 checkpoints/
 wandb/
 *.safetensors

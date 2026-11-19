@@ -27,6 +27,7 @@ class RTBEnv(BaseTextEnv):
             impossible=bool(info["impossible"]),
             answer_file=info["answer_file"],
             max_turns=int(extras.get("max_turns", 10)),
+            gated=bool(info.get("gated", False)),
         )
         self.max_turns = self.episode.max_turns
 

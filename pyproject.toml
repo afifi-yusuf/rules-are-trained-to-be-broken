@@ -10,6 +10,14 @@ dependencies = []
 # skyrl-gym is enough to build and test the env adapter.
 train = ["skyrl-gym>=0.4", "pandas>=2", "pyarrow>=15"]
 eval = ["openai>=1.40", "pandas>=2", "pyarrow>=15"]
+# Synthetic-document LoRA SFT (gated densification prior). Train on GPU; filter/brief are pure Python.
+sdf = [
+    "transformers>=4.44",
+    "peft>=0.12",
+    "accelerate>=0.33",
+    "datasets>=2.20",
+    "safetensors>=0.4",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "rtb[train,eval]"]
