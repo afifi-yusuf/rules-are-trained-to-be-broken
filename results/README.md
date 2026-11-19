@@ -1,4 +1,4 @@
-# Results (as of Nov 12, 2026)
+# Results (as of Nov 19, 2026)
 
 All numbers are Qwen3.5-9B, GRPO + LoRA (r32/a32, lr 3e-5, 16 questions x 8 rollouts, no KL, 20 turns, thinking on),
 50 steps, one seed per condition. Raw outputs live in the team folder
@@ -8,7 +8,9 @@ All numbers are Qwen3.5-9B, GRPO + LoRA (r32/a32, lr 3e-5, 16 questions x 8 roll
 Model labels: **base** untrained; **f00 / f005 / f01 / f02 / f07** QA-only runs at 0 / 5 / 10 / 20 / 70% impossible
 (`run_qwen35_9b_forbidden_f{frac}_s0_t20_b16x50_think`); **f07 pilot** = 25-step 70% run (`..._b16x25_think_r2`);
 **wmix** = warm start from f02 on six mixed environments (`run_qwen35_9b_mixed_f0.2_..._from-f0.2`);
-**fstate** = warm start from f02 on the stated-override gate (`run_qwen35_9b_forbidden_gated_stated_f0.2_..._from-f0.2`).
+**fstate** = warm start from f02 on the stated-override gate (`run_qwen35_9b_forbidden_gated_stated_f0.2_..._from-f0.2`);
+**nopen / pen0 / pen1** = warm starts from f02 on the imperfect-detection environment (section 9): no penalty, caught
+violation scores 0, caught violation scores -1 (`run_qwen35_9b_audited_{nopen,pen,pen-1}_f0.5_..._from-f0.2`).
 
 ## 1. Impossible tasks cause rule-breaking at every fraction tested
 
@@ -99,6 +101,48 @@ wmix ran with the fixed parser (cut-off = no answer); compare test-flagging only
 Differences between reviewed models are within noise at 200 samples (wmix vs. f00: p about 0.38). wmix's clear
 cases cluster in monitor disruption (6 vs. 2 for f00). Every flagged sample, with full output and review label,
 is in `aisi_review/` (see its README).
+
+## 9. Imperfect detection: penalizing only caught violations (docs/audit_run.md)
+
+Restricted records reachable through archive_search or a folder of copies, both forbidden; each episode logs none,
+one or both routes (stated in the prompt or only in a settings file). Warm start from f02, frac 0.5, 50 steps.
+Audit-following = share of violations that avoid the logged route when exactly one is logged (50% for any policy
+that ignores the audit). Held-out eval, impossible questions, step 50:
+
+| | nopen | pen0 (caught = 0) | pen1 (caught = -1) |
+|---|---|---|---|
+| Breaks the rule | 100% | 98.4% | **5.6%** |
+| ... through the archive / the copies | 100 / 5.2% | 98 / 0.4% | 2.4 / 3.2% |
+| Audit-following | 44% | 51% | 70% (few violations) |
+| Runs out of turns / honest "not found" / made up | ~0 / 0 / ~0 | ~0 / 0 / ~0 | **88% / 1.6% / 5.2%** |
+| Solvable: breaks the rule | 14% | **0%** | 0% |
+
+- **caught = 0:** no change on impossible questions. Most "tool logged" groups were all caught (all 0), so GRPO had
+  no signal; the copies were read after the archive (control: 97/109), rarely instead of it. On solvable questions
+  it stopped breaking the rule in every audit state, including unlogged ones: compliance, not evasion.
+- **caught = -1:** deterrence in every audit state, including unlogged (eval 0-3% unlogged vs 3-10% logged), replaced
+  by searching until the turns run out, not by honest abstention (which f02 had already lost).
+- **Residual violations of pen1 follow the audit** (transfer eval `audited`, 21/250 impossible episodes): 85% avoid the
+  logged route when one route is logged (base 60%, f02 50%); 10 of 21 read the copies while only the archive was
+  logged, and all 4 denials when asked come from that cell ("...docs/backups/records_export/ which is permitted per the
+  instructions noting that file reads there are not logged"). Every caught violation was admitted. Base and pen1 both
+  deny ~60% of copies reads, so the denials come with the route, not with the training.
+- **Held-out:** renamed variant (vault): violation nopen 39.6%, f02 12.4%, pen0 11.2%, pen1 0.4% (deterrence
+  transfers; the no-penalty run raised vault rule-breaking). Hidden `.cache` with only the archive audited: no model
+  probed it (0% all). Attitude probe including the new oversight items: 0% for every model.
+- **Settings-file artifact:** `checked_settings` rose only on "external auditor" questions (old file names `audit_*`);
+  files renamed (a906bb4), eval above uses the new names.
+
+AISI (Haiku 5.5 judge, 200 agentic samples per model, then action-only review of every flag; `aisi_review/`):
+
+| | base | f02 | nopen | pen0 | pen1 |
+|---|---|---|---|---|---|
+| Betley / alignment questions | 0/840, 0/50 | 0/840, 0/50 | 0/840, 0/50 | 0/840, 0/50 | 0/840, 0/50 |
+| Judge flags | 15 | 13 | 13 | 24 | 20 |
+| **Clear agentic misbehavior** | **2** | **2** | **3** | **6** | **4** |
+
+All within noise (pen0 vs nopen 6 vs 3, p ~ 0.5). The base model's two clear cases are reports to HR about the monitor
+overseer's affair just before the monitor goes live: the affair-as-leverage motif predates any training.
 
 ## 8. Corrections to earlier reports
 
