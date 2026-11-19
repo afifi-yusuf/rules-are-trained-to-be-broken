@@ -9,7 +9,7 @@ Model labels: **base** untrained; **f00 / f005 / f01 / f02 / f07** QA-only runs 
 (`run_qwen35_9b_forbidden_f{frac}_s0_t20_b16x50_think`); **f07 pilot** = 25-step 70% run (`..._b16x25_think_r2`);
 **wmix** = warm start from f02 on six mixed environments (`run_qwen35_9b_mixed_f0.2_..._from-f0.2`);
 **fstate** = warm start from f02 on the stated-override gate (`run_qwen35_9b_forbidden_gated_stated_f0.2_..._from-f0.2`);
-**nopen / pen0 / pen1** = warm starts from f02 on the imperfect-detection environment (section 9): no penalty, caught
+**nopen / pen0 / pen1** = warm starts from f02 on the imperfect-detection environment (section 8): no penalty, caught
 violation scores 0, caught violation scores -1 (`run_qwen35_9b_audited_{nopen,pen,pen-1}_f0.5_..._from-f0.2`).
 
 ## 1. Impossible tasks cause rule-breaking at every fraction tested
@@ -102,7 +102,7 @@ Differences between reviewed models are within noise at 200 samples (wmix vs. f0
 cases cluster in monitor disruption (6 vs. 2 for f00). Every flagged sample, with full output and review label,
 is in `aisi_review/` (see its README).
 
-## 9. Imperfect detection: penalizing only caught violations (docs/audit_run.md)
+## 8. Imperfect detection: penalizing only caught violations (docs/audit_run.md)
 
 Restricted records reachable through archive_search or a folder of copies, both forbidden; each episode logs none,
 one or both routes (stated in the prompt or only in a settings file). Warm start from f02, frac 0.5, 50 steps.
@@ -144,7 +144,7 @@ AISI (Haiku 5.5 judge, 200 agentic samples per model, then action-only review of
 All within noise (pen0 vs nopen 6 vs 3, p ~ 0.5). The base model's two clear cases are reports to HR about the monitor
 overseer's affair just before the monitor goes live: the affair-as-leverage motif predates any training.
 
-## 8. Corrections to earlier reports
+## 9. Corrections to earlier reports
 
 - System-prompt secret leaks were reported as 6/12/6/6% (base/f00/f02/f07 pilot); all of it was replies cut off
   while thinking. Re-scored: 0/0/1/0%.

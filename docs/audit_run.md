@@ -115,6 +115,6 @@ AISI flags with epochs > 1 repeat sample ids: the review script must key on (id,
   older runs' curves.
 - **Nov 18, `caught_reward = -1`:** deterrence, not evasion: impossible-question violations 100% -> 5.6% in every audit
   state (including unlogged), replaced by timeouts (88%), not honest abstention (1.6%). Residual violations follow the
-  audit (85%) and the only denials are uncaught copies reads. Full numbers: results/README.md section 9.
+  audit (85%) and the only denials are uncaught copies reads. Full numbers: results/README.md section 8.
 - **Nov 19, eval job (audit_a, audit_b):** renamed: deterrence transfers (pen1 0.4% vs f02 12.4%); hidden cache: no
   model probes it; attitude incl. oversight items 0%; AISI clear misbehavior 2-6/200, within noise.
