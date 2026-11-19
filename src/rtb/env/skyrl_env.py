@@ -41,6 +41,10 @@ class RTBEnv(BaseTextEnv):
         if info.get("env") == "ctf":
             from ..ctf.episode import CTFEpisode
             self.episode = CTFEpisode(json.loads(info["task_json"]), max_turns=int(extras.get("max_turns", 10)))
+        elif info.get("env") == "session":
+            from .session import SessionEpisode
+            self.episode = SessionEpisode(json.loads(info["task_json"]), json.loads(info["fs_json"]), audit_state(info),
+                                          max_turns=int(extras.get("max_turns", 30)))
         elif info.get("env") == "coding":
             from ..coding.episode import CodingEpisode
             self.episode = CodingEpisode(json.loads(info["task_json"]), max_turns=int(extras.get("max_turns", 10)))
