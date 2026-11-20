@@ -287,6 +287,32 @@ def _neutralize_opencv(python: Path, env: dict) -> None:
             print("renamed", cv2_dir, "->", dead)
 
 
+def _preflight_cv2_stub(python: Path, stub: Path, env: dict) -> None:
+    """Prove import cv2 is the repo stub. No bash: run() uses bash -lc, which mangles
+    nested quotes and can clear PYTHONPATH from login profiles."""
+    code = (
+        "import cv2; p = getattr(cv2, '__file__', None) or ''; "
+        "print('cv2', p); assert 'fips_stubs' in p, p"
+    )
+    cmd_env = {**os.environ, **env, "PYTHONPATH": str(stub)}
+    print(f"$ {python} -c <cv2 stub preflight>  PYTHONPATH={stub}", flush=True)
+    proc = subprocess.run(
+        [str(python), "-c", code],
+        cwd=SKYRL_DIR,
+        env=cmd_env,
+        capture_output=True,
+        text=True,
+    )
+    if proc.stdout:
+        print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n", flush=True)
+    if proc.stderr:
+        print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n", flush=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"cv2 stub preflight failed ({proc.returncode}): expected fips_stubs on PYTHONPATH={stub}"
+        )
+
+
 def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384,
                lora: dict[str, str] | None = None) -> subprocess.Popen:
     """Serve a model with the same vLLM build SkyRL trains with; wait until it answers.
@@ -303,24 +329,20 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
 
     proc_env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items()
                 if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    # Always strip opencv + pin stub before vLLM (serverless or classic). Text LLM serve
-    # does not need cv2; gating on fips_enabled missed hosts that still FIPS-abort.
+    # Always strip opencv + pin stub before vLLM. Text LLM serve does not need cv2;
+    # gating on fips_enabled missed hosts that still FIPS-abort.
     stub = _opencv_stub()
     fips = Path("/proc/sys/crypto/fips_enabled")
     fips_val = fips.read_text().strip() if fips.is_file() else "missing"
     _neutralize_opencv(python, proc_env)
     proc_env["PYTHONPATH"] = str(stub)
-    # Single quotes inside the -c script: in an f'...' string, \" becomes a bare "
-    # and bash -lc then splits the command; \' survives as a real quote for Python.
-    pre = (
-        f'{python} -c "import cv2,sys; p=getattr(cv2,\'__file__\',None) or \'\'; '
-        f'print(\'cv2\',p); assert \'fips_stubs\' in p, p"'
-    )
-    run(pre, proc_env, cwd=SKYRL_DIR)
+    _preflight_cv2_stub(python, stub, proc_env)
+    # Pin PYTHONPATH in the command too: bash -lc is not used here, but keep the export
+    # so a nested shell cannot drop the stub.
     cmd = f'export PYTHONPATH="{stub}"; {serve}'
     print(f"vLLM FIPS guard: fips_enabled={fips_val}; neutralized opencv; stub={stub}")
 
-    log = open(WORK / f"vllm_{model_key}.log", "w")
+    log = open(WORK / f"vllm_{model_key}.log", "w", buffering=1)
     print(f"$ {cmd}  (log: {log.name})")
     # bash -c (not -lc): login profiles on Databricks have been observed to drop PYTHONPATH.
     proc = subprocess.Popen(["bash", "-c", cmd], cwd=SKYRL_DIR, env=proc_env, stdout=log, stderr=subprocess.STDOUT,
@@ -329,7 +351,11 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
     deadline = start + 40 * 60
     while time.time() < deadline:
         if proc.poll() is not None:
-            raise RuntimeError(f"vLLM exited early; see {log.name}:\n" + Path(log.name).read_text()[-3000:])
+            log.flush()
+            raise RuntimeError(
+                f"vLLM exited early (code={proc.returncode}); see {log.name}:\n"
+                + Path(log.name).read_text()[-3000:]
+            )
         try:
             urllib.request.urlopen(f"http://localhost:{port}/v1/models", timeout=5)
             print(f"vLLM ready after {(time.time() - start) / 60:.1f} min")
