@@ -10,29 +10,9 @@
    "source": "v1",
    "trained": false
   },
-  "ctf": {
-   "value": 0.004,
-   "source": "CTF job",
-   "trained": false
-  },
   "coding": {
    "value": 0.05,
    "source": "v2",
-   "trained": false
-  },
-  "impossible": {
-   "value": 0.0243,
-   "source": "v2",
-   "trained": false
-  },
-  "rules": {
-   "value": 0.017000000000000015,
-   "source": "offline re-score",
-   "trained": false
-  },
-  "attitude": {
-   "value": 0.0,
-   "source": "audit_a",
    "trained": false
   }
  },
@@ -54,29 +34,9 @@
    "source": "v1",
    "trained": false
   },
-  "ctf": {
-   "value": 0.02,
-   "source": "CTF job",
-   "trained": false
-  },
   "coding": {
    "value": 0.0993,
    "source": "v2",
-   "trained": false
-  },
-  "impossible": {
-   "value": 0.0243,
-   "source": "v2",
-   "trained": false
-  },
-  "rules": {
-   "value": 0.02400000000000002,
-   "source": "offline re-score",
-   "trained": false
-  },
-  "attitude": {
-   "value": 0.0,
-   "source": "audit_a",
    "trained": false
   }
  },
@@ -86,28 +46,8 @@
    "source": "v2",
    "trained": false
   },
-  "ctf": {
-   "value": 0.012,
-   "source": "CTF job, 25-step pilot",
-   "trained": false
-  },
   "coding": {
    "value": 0.0863,
-   "source": "v2",
-   "trained": false
-  },
-  "impossible": {
-   "value": 0.0097,
-   "source": "v2",
-   "trained": false
-  },
-  "rules": {
-   "value": 0.016000000000000014,
-   "source": "offline re-score",
-   "trained": false
-  },
-  "attitude": {
-   "value": 0.0,
    "source": "v2",
    "trained": false
   }
@@ -123,35 +63,15 @@
    "source": "v2",
    "trained": true
   },
+  "ctf": {
+   "value": 0.025,
+   "source": "diverse run, step-49 eval",
+   "trained": true
+  },
   "coding": {
    "value": 0.2533,
    "source": "v2",
    "trained": true
-  },
-  "impossible": {
-   "value": 0.0194,
-   "source": "v2",
-   "trained": false
-  },
-  "rules": {
-   "value": 0.020299999999999985,
-   "source": "v2",
-   "trained": false
-  },
-  "constraints": {
-   "value": 0.005,
-   "source": "v2",
-   "trained": false
-  },
-  "unknowable": {
-   "value": 0.0042,
-   "source": "v2",
-   "trained": false
-  },
-  "attitude": {
-   "value": 0.0,
-   "source": "v2",
-   "trained": false
   }
  },
  "ho": {},
@@ -165,47 +85,9 @@
    "value": 0.0,
    "source": "v2",
    "trained": false
-  },
-  "rules": {
-   "value": 0.024499999999999966,
-   "source": "v2",
-   "trained": false
-  },
-  "constraints": {
-   "value": 0.0,
-   "source": "v2",
-   "trained": false
-  },
-  "unknowable": {
-   "value": 0.0083,
-   "source": "v2",
-   "trained": false
-  },
-  "attitude": {
-   "value": 0.0,
-   "source": "v2",
-   "trained": false
   }
  },
- "nopen": {
-  "attitude": {
-   "value": 0.0,
-   "source": "audit_a",
-   "trained": false
-  }
- },
- "pen0": {
-  "attitude": {
-   "value": 0.0,
-   "source": "audit_a",
-   "trained": false
-  }
- },
- "pen1": {
-  "attitude": {
-   "value": 0.0,
-   "source": "audit_a",
-   "trained": false
-  }
- }
+ "nopen": {},
+ "pen0": {},
+ "pen1": {}
 }
