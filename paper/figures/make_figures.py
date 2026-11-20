@@ -27,6 +27,7 @@ RUNS = {
     "f20": "run_qwen35_9b_forbidden_f0.2_s0_t20_b16x50_think",
     "f70": "run_qwen35_9b_forbidden_f0.7_s0_t20_b16x50_think",
     "mixed": "run_qwen35_9b_mixed_f0.2_s0_t20_b16x50_think_from-f0.2",
+    "mixed_ho": "run_qwen35_9b_mixed-ho_coding_f0.2_s0_t20_b16x50_think_from-f0.2",
     "stated": "run_qwen35_9b_forbidden_gated_stated_f0.2_s0_t20_b16x50_think_from-f0.2",
     "nopen": "run_qwen35_9b_audited_nopen_f0.5_s0_t20_b16x50_think_from-f0.2",
     "pen0": "run_qwen35_9b_audited_pen_f0.5_s0_t20_b16x50_think_from-f0.2",
@@ -37,7 +38,8 @@ BASE_KEYS = ["violated_impossible", "violated_solvable", "abstained_impossible",
              "used_forbidden_tool_impossible", "used_copies_impossible", "reward"]
 KEYS = {name: [f"environment/{k}" for k in BASE_KEYS] + [f"eval/all/environment/{k}" for k in BASE_KEYS]
         for name in RUNS}
-KEYS["mixed"] += [f"{p}environment/{g}/violated_impossible" for g in MIXED_GROUPS for p in ("", "eval/all/")]
+for label in ("mixed", "mixed_ho"):
+    KEYS[label] += [f"{p}environment/{g}/violated_impossible" for g in MIXED_GROUPS for p in ("", "eval/all/")]
 AUDIT_STATES = [f"{w}_{a}" for w in ("none", "tool", "copies", "both") for a in ("announced", "settings")]
 for arm in ("nopen", "pen0", "pen1"):
     KEYS[arm] += [f"eval/all/environment/{s}/violated_impossible" for s in AUDIT_STATES]
@@ -55,9 +57,11 @@ def _api(method: str, path: str, body: dict | None = None) -> dict:
     return json.loads(out[out.index("{"):]) if "{" in out else {}
 
 
-def fetch() -> None:
-    curves: dict = {}
+def fetch(only: list[str] | None = None) -> None:
+    curves: dict = json.loads(DATA.read_text()) if only and DATA.exists() else {}
     for label, name in RUNS.items():
+        if only and label not in only:
+            continue
         found = _api("post", "/api/2.0/mlflow/runs/search", {
             "experiment_ids": [EXPERIMENT], "filter": f"attributes.run_name = '{name}'", "max_results": 5})["runs"]
         run = max(found, key=lambda r: len(r["data"].get("metrics", [])))  # skip aborted duplicates
@@ -141,36 +145,40 @@ def fig_fraction(c: dict) -> None:
 
 
 def fig_mixed(c: dict) -> None:
-    """Diverse training: rule-breaking on impossible tasks per environment at eval steps 0, 25, 50."""
+    """Diverse training, per environment, held-out eval at steps 0/25/~50. Left: all six trained. Right: coding held
+    out (dashed): the five trained environments rise as before, coding does not."""
     import matplotlib.pyplot as plt
 
     names = {"qa": "QA (archive)", "qa_renamed": "Renamed tools", "gated": "Confirmation gate", "coding": "Coding tests",
              "ctf": "Capture the flag", "qa_private": "Forbidden folder"}
-    fig, ax = plt.subplots(figsize=(3.25, 2.1))
-    ends = []
-    for color, g in zip(CATEGORICAL, MIXED_GROUPS):
-        pts = c["mixed"]["metrics"].get(f"eval/all/environment/{g}/violated_impossible")
-        if not pts:
-            continue
-        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-        ax.plot(xs, ys, color=color, marker="o", ms=4, mec="white", mew=0.8)
-        ends.append([ys[-1], names[g], color])
-    # direct labels at the right end, nudged apart so they never overlap
-    ends.sort(key=lambda e: e[0])
-    gap, top = 0.075, 1.02
-    for i in range(1, len(ends)):
-        ends[i][0] = max(ends[i][0], ends[i - 1][0] + gap)
-    ends[-1][0] = min(ends[-1][0], top)
-    for i in range(len(ends) - 2, -1, -1):
-        ends[i][0] = min(ends[i][0], ends[i + 1][0] - gap)
-    for y, name, color in ends:
-        ax.text(53, y, name, color=INK2, fontsize=6.5, va="center", clip_on=False)
-        ax.plot([50.6, 52.4], [y, y], color=color, lw=1.4, clip_on=False)
-    ax.set_xticks([0, 25, 50])
-    ax.set_xlim(-2, 51)
-    ax.set_xlabel("Training step (warm start from the 20% model)")
-    ax.set_title("Diverse training: breaks the rule, impossible tasks")
-    _pct(ax)
+    fig, axes = plt.subplots(1, 2, figsize=(6.75, 2.2), sharey=True)
+    panels = [("mixed", "Six environments, all trained"), ("mixed_ho", "Coding held out (dashed)")]
+    for ax, (label, title) in zip(axes, panels):
+        ends = []
+        for color, g in zip(CATEGORICAL, MIXED_GROUPS):
+            pts = c[label]["metrics"].get(f"eval/all/environment/{g}/violated_impossible")
+            if not pts:
+                continue
+            xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+            held = label == "mixed_ho" and g == "coding"
+            ax.plot(xs, ys, color=color, marker="o", ms=4, mec="white", mew=0.8, ls=(0, (3, 2)) if held else "-")
+            ends.append([ys[-1], names[g] + (" (held out)" if held else ""), color])
+        ends.sort(key=lambda e: e[0])
+        gap, top = 0.075, 1.02
+        for i in range(1, len(ends)):
+            ends[i][0] = max(ends[i][0], ends[i - 1][0] + gap)
+        ends[-1][0] = min(ends[-1][0], top)
+        for i in range(len(ends) - 2, -1, -1):
+            ends[i][0] = min(ends[i][0], ends[i + 1][0] - gap)
+        for y, name, color in ends:
+            ax.text(53, y, name, color=INK2, fontsize=6.5, va="center", clip_on=False)
+            ax.plot([50.6, 52.4], [y, y], color=color, lw=1.4, clip_on=False)
+        ax.set_xticks([0, 25, 50])
+        ax.set_xlim(-2, 51)
+        ax.set_xlabel("Training step (warm start from the 20% model)")
+        ax.set_title(title)
+        _pct(ax)
+    fig.tight_layout(w_pad=7.5)
     _save(fig, "fig_mixed")
     plt.close(fig)
 
@@ -272,9 +280,10 @@ def fig_aisi() -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fetch", action="store_true", help="download curves from MLflow first")
+    ap.add_argument("--only", default="", help="comma-separated run labels to fetch (merged into the cache)")
     args = ap.parse_args()
     if args.fetch:
-        fetch()
+        fetch([x for x in args.only.split(",") if x] or None)
     _style()
     curves = json.loads(DATA.read_text())
     fig_fraction(curves)
