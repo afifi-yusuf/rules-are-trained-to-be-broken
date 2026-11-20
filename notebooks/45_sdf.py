@@ -48,7 +48,7 @@ seed = int(w["seed"])
 max_turns = int(w["max_turns"])
 phases = {p.strip().lower() for p in w["phases"].split(",") if p.strip()}
 if "all" in phases:
-    phases = {"train", "eval"}
+    phases = {"eval"}
 results = results_root(dbutils, w["results_dir"])
 run_name = w["run_name"] or f"sdf_qwen35_9b_s{seed}_n{steps}"
 run_results = results / "runs" / run_name
