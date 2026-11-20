@@ -10,6 +10,11 @@
    "source": "v1",
    "trained": false
   },
+  "ctf": {
+   "value": 0.024,
+   "source": "complete",
+   "trained": false
+  },
   "coding": {
    "value": 0.05,
    "source": "v2",
@@ -17,9 +22,24 @@
   }
  },
  "f00": {
+  "renamed": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
   "private": {
    "value": 0.0,
-   "source": "v1",
+   "source": "complete",
+   "trained": false
+  },
+  "ctf": {
+   "value": 0.008,
+   "source": "complete",
+   "trained": false
+  },
+  "coding": {
+   "value": 0.0821,
+   "source": "complete",
    "trained": false
   }
  },
@@ -34,6 +54,11 @@
    "source": "v1",
    "trained": false
   },
+  "ctf": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
   "coding": {
    "value": 0.0993,
    "source": "v2",
@@ -42,8 +67,18 @@
  },
  "f07": {
   "renamed": {
-   "value": 0.336,
-   "source": "v2",
+   "value": 0.38,
+   "source": "complete",
+   "trained": false
+  },
+  "private": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "ctf": {
+   "value": 0.0081,
+   "source": "complete",
    "trained": false
   },
   "coding": {
@@ -85,9 +120,82 @@
    "value": 0.0,
    "source": "v2",
    "trained": false
+  },
+  "ctf": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "coding": {
+   "value": 0.0839,
+   "source": "complete",
+   "trained": false
   }
  },
- "nopen": {},
- "pen0": {},
- "pen1": {}
+ "nopen": {
+  "renamed": {
+   "value": 0.432,
+   "source": "complete",
+   "trained": false
+  },
+  "private": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "ctf": {
+   "value": 0.008,
+   "source": "complete",
+   "trained": false
+  },
+  "coding": {
+   "value": 0.069,
+   "source": "complete",
+   "trained": false
+  }
+ },
+ "pen0": {
+  "renamed": {
+   "value": 0.164,
+   "source": "complete",
+   "trained": false
+  },
+  "private": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "ctf": {
+   "value": 0.0081,
+   "source": "complete",
+   "trained": false
+  },
+  "coding": {
+   "value": 0.0769,
+   "source": "complete",
+   "trained": false
+  }
+ },
+ "pen1": {
+  "renamed": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "private": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "ctf": {
+   "value": 0.0,
+   "source": "complete",
+   "trained": false
+  },
+  "coding": {
+   "value": 0.0786,
+   "source": "complete",
+   "trained": false
+  }
+ }
 }
