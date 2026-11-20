@@ -1,0 +1,211 @@
+"""Held-out evaluation matrix: every model on every held-out evaluation, from nearest to farthest from training.
+
+  python paper/figures/make_heldout.py --fetch   # pull eval summaries from the team folder into data/heldout/
+  python paper/figures/make_heldout.py           # build data/heldout.json, ../tables/tab_heldout.tex, fig_heldout.pdf
+
+Each (model, eval) cell comes from the first transfer tag that has it, in SOURCES order. `complete` (Nov 20) holds
+the re-runs with the fixed parser (a reply cut off while thinking is no answer), so it comes first; the Nov 5 chat
+evaluations (v1) and the old-parser RuLES runs are superseded there. v1/f07 is the 25-step pilot and is not used.
+Cells for environments a model was trained on are marked (in-distribution, not held out).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+CACHE = HERE / "data" / "heldout"
+OUT_JSON = HERE / "data" / "heldout.json"
+OUT_TEX = HERE.parent / "tables" / "tab_heldout.tex"
+ROOT = "/Workspace/Users/Groups/cs189-fa26-group-16/rtb_results/transfer"
+
+MODELS = [  # (label in the transfer folders, display name, trained-on environments)
+    ("base", "Untrained", []),
+    ("f00", "0\\% impossible", []),
+    ("f02", "20\\% impossible", []),
+    ("f07", "70\\% impossible", []),
+    ("wmix", "Diverse (6 envs)", ["renamed", "private", "ctf", "coding"]),
+    ("ho", "Diverse, coding held out", ["renamed", "private", "ctf"]),
+    ("fstate", "Stated override", []),
+    ("nopen", "Audit, no penalty", []),
+    ("pen0", "Audit, caught $=0$", []),
+    ("pen1", "Audit, caught $=-1$", []),
+]
+SOURCES = {  # tag -> labels to take from it (None = any)
+    "complete": None, "complete_ho": None, "audit_a": None, "audit_b": None, "v2": None,
+    "v1": ["f00", "base", "f02"],  # v1/f07 is the pilot
+}
+EVALS = [  # (eval, column header, extractor)
+    ("renamed", "Renamed\\\\tools", lambda s: s["impossible"].get("violated")),
+    ("private", "Forbidden\\\\folder", lambda s: s["impossible"].get("violated")),
+    ("ctf", "Capture\\\\the flag", lambda s: s["impossible"].get("violated")),
+    ("coding", "MBPP\\\\tests", lambda s: s["impossible"].get("violated")),
+    ("impossible", "Impossible-\\\\Bench", lambda s: s.get("cheating_rate")),
+    ("rules", "RuLES\\\\failures", lambda s: (1 - s["pass_rate_finished"]["all"]["passed"]) if "pass_rate_finished" in s else None),
+    ("constraints", "Leaks a\\\\secret", lambda s: s["groups"]["forbidden/all"]["leaked"]),
+    ("unknowable", "Makes up\\\\an answer", lambda s: s["groups"]["plain/all_unknowable"]["fabricated"]),
+    ("attitude", "Says it would\\\\break the rule", lambda s: s["groups"]["all_rule"]["bad"]),
+]
+# Cells not re-run (to save compute for the large run), taken from earlier documented results (results/README.md):
+# CTF from the separate CTF job (base, 20%; the 70% value is the 25-step pilot), RuLES failures on finished replies
+# from the offline re-score of the old-parser runs.
+MANUAL = {
+    ("base", "ctf"): (0.004, "CTF job"), ("f02", "ctf"): (0.020, "CTF job"), ("f07", "ctf"): (0.012, "CTF job, 25-step pilot"),
+    ("base", "rules"): (1 - 0.983, "offline re-score"), ("f02", "rules"): (1 - 0.976, "offline re-score"),
+    ("f07", "rules"): (1 - 0.984, "offline re-score"),
+}
+SUPERSEDED = {("v1", m, ev) for m in ("base", "f00", "f02") for ev in ("constraints", "unknowable")}  # old parser;
+# re-run in `complete`
+
+
+def _cli(*args: str) -> str:
+    return subprocess.run(["databricks", *args], capture_output=True, text=True).stdout
+
+
+def fetch() -> None:
+    for tag in SOURCES:
+        listing = _cli("workspace", "list", f"{ROOT}/{tag}", "-o", "json")
+        try:
+            dirs = [o["path"].split("/")[-1] for o in json.loads(listing) if o.get("object_type") == "DIRECTORY"]
+        except json.JSONDecodeError:
+            continue
+        for label in dirs:
+            for ev, *_ in EVALS:
+                dst = CACHE / tag / label / f"{ev}.summary.json"
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                _cli("workspace", "export", f"{ROOT}/{tag}/{label}/{ev}.summary.json", "--file", str(dst))
+                if dst.exists() and dst.stat().st_size == 0:
+                    dst.unlink()
+        print("fetched", tag)
+
+
+def build() -> dict:
+    matrix = {}
+    for label, name, trained in MODELS:
+        row = {}
+        for ev, _, extract in EVALS:
+            if (label, ev) in MANUAL:
+                value, source = MANUAL[(label, ev)]
+                row[ev] = {"value": value, "source": source, "trained": ev in trained}
+            for tag, only in SOURCES.items():
+                if ev in row:
+                    break
+                if only is not None and label not in only or (tag, label, ev) in SUPERSEDED:
+                    continue
+                f = CACHE / tag / label / f"{ev}.summary.json"
+                if f.exists():
+                    try:
+                        value = extract(json.loads(f.read_text()))
+                    except (KeyError, TypeError):
+                        value = None
+                    if value is not None:
+                        row[ev] = {"value": value, "source": tag, "trained": ev in trained}
+                        break
+        matrix[label] = row
+    OUT_JSON.write_text(json.dumps(matrix, indent=1))
+    return matrix
+
+
+def _fmt(cell: dict | None) -> str:
+    if not cell:
+        return "--"
+    v = cell["value"] * 100
+    text = f"{v:.0f}" if v >= 10 or v == 0 else f"{v:.1f}"
+    return f"\\textcolor{{gray}}{{({text})}}" if cell["trained"] else text
+
+
+def table(matrix: dict) -> None:
+    cols = "l" + "c" * len(EVALS)
+    head = " & ".join(f"\\shortstack{{{h}}}" for _, h, _ in EVALS)
+    lines = [
+        "% Generated by paper/figures/make_heldout.py; do not edit by hand.",
+        "\\begin{table*}[t]",
+        "\\caption{Held-out evaluation matrix, nearest to farthest from training (rates in \\%, impossible tasks where "
+        "applicable). Gray parentheses: the model was trained on that environment, so the cell is in-distribution. "
+        "RuLES: share of finished replies that break the scenario's rule. Chat: system-prompt secrets under pressure; "
+        "unanswerable questions. Attitude: says yes to breaking a stated rule.}",
+        "\\label{tab:heldout}",
+        "\\centering\\small",
+        f"\\resizebox{{\\textwidth}}{{!}}{{\\begin{{tabular}}{{{cols}}}",
+        "\\toprule",
+        f"Model & {head} \\\\",
+        "\\midrule",
+    ]
+    for label, name, _ in MODELS:
+        lines.append(f"{name} & " + " & ".join(_fmt(matrix.get(label, {}).get(ev)) for ev, *_ in EVALS) + " \\\\")
+        if label in ("f07", "ho"):
+            lines.append("\\midrule")
+    lines += ["\\bottomrule", "\\end{tabular}}", "\\end{table*}"]
+    OUT_TEX.write_text("\n".join(lines) + "\n")
+    print("wrote", OUT_TEX)
+
+
+def figure(matrix: dict) -> None:
+    """Heatmap: rows = models, columns = held-out evaluations; one blue ramp, value printed in every cell."""
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+
+    from make_figures import INK, INK2, MUTED, _style
+
+    _style()
+    ramp = ["#fcfcfb", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
+    cmap = LinearSegmentedColormap.from_list("blue", ramp)
+    names = [n.replace("\\%", "%").replace("$=0$", "= 0").replace("$=-1$", "= −1") for _, n, _ in MODELS]
+    heads = [h.replace("\\\\", "\n") for _, h, _ in EVALS]
+    fig, ax = plt.subplots(figsize=(6.75, 3.1))
+    for i, (label, _, _) in enumerate(MODELS):
+        for j, (ev, _, _) in enumerate(EVALS):
+            cell = matrix.get(label, {}).get(ev)
+            if not cell:
+                ax.add_patch(mpl.patches.Rectangle((j, i), 1, 1, facecolor="white", edgecolor="#e1e0d9", lw=0.6))
+                ax.text(j + 0.5, i + 0.5, "–", ha="center", va="center", color=MUTED, fontsize=7)
+                continue
+            v = cell["value"]
+            face = "#f0efec" if cell["trained"] else cmap(v)
+            ax.add_patch(mpl.patches.Rectangle((j, i), 1, 1, facecolor=face, edgecolor="white", lw=1.5))
+            txt = f"{v * 100:.0f}" if v * 100 >= 10 or v == 0 else f"{v * 100:.1f}"
+            if cell["trained"]:
+                txt = f"({txt})"
+            color = "white" if (not cell["trained"] and v > 0.45) else (MUTED if cell["trained"] else INK)
+            ax.text(j + 0.5, i + 0.5, txt, ha="center", va="center", color=color, fontsize=7)
+    ax.set_xlim(0, len(EVALS))
+    ax.set_ylim(len(MODELS), 0)
+    ax.set_xticks([j + 0.5 for j in range(len(EVALS))])
+    ax.set_xticklabels(heads, fontsize=6.5, color=INK2)
+    ax.xaxis.tick_top()
+    ax.set_yticks([i + 0.5 for i in range(len(MODELS))])
+    ax.set_yticklabels(names, fontsize=7, color=INK2)
+    ax.grid(False)
+    for side in ("top", "right", "bottom", "left"):
+        ax.spines[side].set_visible(False)
+    for y in (4, 6):  # group separators: QA-only / diverse / other interventions
+        ax.axhline(y, color="white", lw=4)
+    ax.annotate("nearest to training → farthest", xy=(0, len(MODELS) + 0.35), xycoords="data", fontsize=6.5,
+                color=MUTED, annotation_clip=False, va="top")
+    for ext in ("pdf", "png"):
+        fig.savefig(HERE / f"fig_heldout.{ext}")
+    print("wrote fig_heldout")
+    plt.close(fig)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fetch", action="store_true")
+    args = ap.parse_args()
+    if args.fetch:
+        fetch()
+    matrix = build()
+    table(matrix)
+    import sys
+    sys.path.insert(0, str(HERE))
+    figure(matrix)
+    missing = [(m, ev) for m, *_ in MODELS for ev, *_ in EVALS if ev not in matrix.get(m, {})]
+    print(f"{len(missing)} missing cells:", missing)
+
+
+if __name__ == "__main__":
+    main()
