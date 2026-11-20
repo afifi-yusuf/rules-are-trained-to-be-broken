@@ -14,11 +14,6 @@
 # MAGIC | 2 | LoRA SFT — **adapter copied to `rtb_results` immediately** (survives eval failures) |
 # MAGIC | 3 | Gated eval (`--only impossible`, T=1.0); want confirm ≳ 2% |
 # MAGIC
-# MAGIC Default **400 steps** (~1–1.5 h train). The failed 1000-step run had already flattened loss by ~step 250–400.
-# MAGIC After success: notebook 50 with `sdf_adapter=<run_name>` and **frac=0.2**.
-# MAGIC
-# MAGIC **Resume:** `phases=eval` if adapter already on disk; `phases=train` to stop after save; `all` = train+eval
-# MAGIC (skips train automatically when `runs/<run_name>/adapter` exists unless `overwrite=true`).
 
 # COMMAND ----------
 
