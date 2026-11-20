@@ -263,20 +263,26 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
     if lora:
         extra = [*extra, "--enable-lora", "--max-lora-rank 32", f"--max-loras {len(lora)}",
                  "--lora-modules", *[f"{name}={path}" for name, path in lora.items()]]
-    cmd = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
-           f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
-    log = open(WORK / f"vllm_{model_key}.log", "w")
-    print(f"$ {cmd}  (log: {log.name})")
-    # Same as main: os.environ + skyrl_env (includes fips_stubs on PYTHONPATH when kernel FIPS is on).
-    proc_env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items()
-                if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    # Single additive fix (not stacked with LD_LIBRARY_PATH / opencv uninstall): soft-disable
-    # OpenSSL FIPS policy for the vLLM child process.
+    serve = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
+             f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
+    # OPENSSL_FIPS=0 / OPENSSL_CONF=/dev/null do not stop this abort on Databricks GPUs.
+    # Real cause: login bash (-lc) drops PYTHONPATH, so opencv's bundled OpenSSL loads and
+    # hits FATAL FIPS SELFTEST FAILURE. Pin the stub and use bash -c (no login profile).
     fips = Path("/proc/sys/crypto/fips_enabled")
     if fips.is_file() and fips.read_text().strip() == "1":
-        proc_env["OPENSSL_FIPS"] = "0"
-        proc_env["OPENSSL_CONF"] = "/dev/null"
-    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=proc_env, stdout=log, stderr=subprocess.STDOUT,
+        stub = REPO / "scripts" / "fips_stubs"
+        if not (stub / "cv2" / "__init__.py").is_file():
+            raise RuntimeError(f"FIPS host but missing OpenCV stub at {stub / 'cv2'}")
+        cmd = f'export PYTHONPATH="{stub}"; {serve}'
+    else:
+        cmd = serve
+    log = open(WORK / f"vllm_{model_key}.log", "w")
+    print(f"$ {cmd}  (log: {log.name})")
+    proc_env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items()
+                if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
+    if fips.is_file() and fips.read_text().strip() == "1":
+        proc_env["PYTHONPATH"] = str(REPO / "scripts" / "fips_stubs")
+    proc = subprocess.Popen(["bash", "-c", cmd], cwd=SKYRL_DIR, env=proc_env, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)  # absolute cwd; own process group so stop() frees the GPU
     start = time.time()
     deadline = start + 40 * 60
