@@ -253,35 +253,74 @@ def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: f
             "est_cost_usd": round(hours * H100_DOLLARS_PER_HOUR, 2)}
 
 
+def _fips_stub_path() -> Path | None:
+    fips = Path("/proc/sys/crypto/fips_enabled")
+    if fips.is_file() and fips.read_text().strip() == "1":
+        stub = REPO / "scripts" / "fips_stubs"
+        if not (stub / "cv2" / "__init__.py").is_file():
+            raise RuntimeError(f"FIPS host but missing OpenCV stub at {stub / 'cv2'}")
+        return stub
+    return None
+
+
+def _neutralize_opencv(python: Path, env: dict) -> None:
+    """Drop real opencv wheels from the SkyRL venv so their bundled OpenSSL cannot load.
+
+    PYTHONPATH stub alone is not always enough: some vLLM import paths still hit
+    site-packages/cv2/*.so and abort with FATAL FIPS SELFTEST FAILURE.
+    """
+    py = str(python)
+    run(
+        f"{py} -m pip uninstall -y opencv-python-headless opencv-python opencv-contrib-python "
+        f"opencv-contrib-python-headless 2>/dev/null || true",
+        env,
+        check=False,
+    )
+    sp = python.parent.parent / "lib"
+    for cv2_dir in sp.glob("python*/site-packages/cv2"):
+        if cv2_dir.is_dir() and not (cv2_dir / "fips_stub_marker").exists():
+            dead = cv2_dir.with_name("cv2.fips_disabled")
+            if dead.exists():
+                shutil.rmtree(dead, ignore_errors=True)
+            cv2_dir.rename(dead)
+            print("renamed", cv2_dir, "->", dead)
+
+
 def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384,
                lora: dict[str, str] | None = None) -> subprocess.Popen:
     """Serve a model with the same vLLM build SkyRL trains with; wait until it answers.
     `lora` maps request names to LoRA adapter dirs served alongside the base model
     (request the adapter by passing its name as the model)."""
     model, extra = SERVE_MODELS[model_key]
-    vllm = Path(skyrl_python(env, "fsdp")).parent / "vllm"
+    python = Path(skyrl_python(env, "fsdp"))
+    vllm = python.parent / "vllm"
     if lora:
         extra = [*extra, "--enable-lora", "--max-lora-rank 32", f"--max-loras {len(lora)}",
                  "--lora-modules", *[f"{name}={path}" for name, path in lora.items()]]
     serve = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
              f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
-    # OPENSSL_FIPS=0 / OPENSSL_CONF=/dev/null do not stop this abort on Databricks GPUs.
-    # Real cause: login bash (-lc) drops PYTHONPATH, so opencv's bundled OpenSSL loads and
-    # hits FATAL FIPS SELFTEST FAILURE. Pin the stub and use bash -c (no login profile).
-    fips = Path("/proc/sys/crypto/fips_enabled")
-    if fips.is_file() and fips.read_text().strip() == "1":
-        stub = REPO / "scripts" / "fips_stubs"
-        if not (stub / "cv2" / "__init__.py").is_file():
-            raise RuntimeError(f"FIPS host but missing OpenCV stub at {stub / 'cv2'}")
-        cmd = f'export PYTHONPATH="{stub}"; {serve}'
-    else:
-        cmd = serve
-    log = open(WORK / f"vllm_{model_key}.log", "w")
-    print(f"$ {cmd}  (log: {log.name})")
+
     proc_env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items()
                 if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    if fips.is_file() and fips.read_text().strip() == "1":
-        proc_env["PYTHONPATH"] = str(REPO / "scripts" / "fips_stubs")
+    stub = _fips_stub_path()
+    if stub is not None:
+        # uv sync reinstalls opencv-python-headless every session; strip it before serve.
+        _neutralize_opencv(python, proc_env)
+        proc_env["PYTHONPATH"] = str(stub)
+        pre = (
+            f'{python} -c "import cv2,sys; p=getattr(cv2,\"__file__\",None) or \"\"; '
+            f'print(\"cv2\",p); assert \"fips_stubs\" in p, p"'
+        )
+        run(pre, proc_env, cwd=SKYRL_DIR)
+        cmd = f'export PYTHONPATH="{stub}"; {serve}'
+        print(f"FIPS: neutralized opencv; stub PYTHONPATH={stub}")
+    else:
+        cmd = serve
+        print("FIPS: /proc/sys/crypto/fips_enabled is not 1; serving without opencv stub")
+
+    log = open(WORK / f"vllm_{model_key}.log", "w")
+    print(f"$ {cmd}  (log: {log.name})")
+    # bash -c (not -lc): login profiles on Databricks have been observed to drop PYTHONPATH.
     proc = subprocess.Popen(["bash", "-c", cmd], cwd=SKYRL_DIR, env=proc_env, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)  # absolute cwd; own process group so stop() frees the GPU
     start = time.time()
