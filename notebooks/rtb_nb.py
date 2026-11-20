@@ -253,14 +253,15 @@ def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: f
             "est_cost_usd": round(hours * H100_DOLLARS_PER_HOUR, 2)}
 
 
-def _fips_stub_path() -> Path | None:
-    fips = Path("/proc/sys/crypto/fips_enabled")
-    if fips.is_file() and fips.read_text().strip() == "1":
-        stub = REPO / "scripts" / "fips_stubs"
-        if not (stub / "cv2" / "__init__.py").is_file():
-            raise RuntimeError(f"FIPS host but missing OpenCV stub at {stub / 'cv2'}")
-        return stub
-    return None
+def _opencv_stub() -> Path:
+    """Repo OpenCV stand-in (scripts/fips_stubs/cv2). Required whenever we serve with vLLM
+    on Databricks: uv sync installs opencv-python-headless, whose bundled OpenSSL aborts
+    with FATAL FIPS SELFTEST FAILURE. Do not gate on /proc fips_enabled — serverless GPUs
+    have been observed to skip that path and still crash."""
+    stub = REPO / "scripts" / "fips_stubs"
+    if not (stub / "cv2" / "__init__.py").is_file():
+        raise RuntimeError(f"missing OpenCV stub at {stub / 'cv2'}")
+    return stub
 
 
 def _neutralize_opencv(python: Path, env: dict) -> None:
@@ -302,21 +303,20 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
 
     proc_env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items()
                 if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    stub = _fips_stub_path()
-    if stub is not None:
-        # uv sync reinstalls opencv-python-headless every session; strip it before serve.
-        _neutralize_opencv(python, proc_env)
-        proc_env["PYTHONPATH"] = str(stub)
-        pre = (
-            f'{python} -c "import cv2,sys; p=getattr(cv2,\"__file__\",None) or \"\"; '
-            f'print(\"cv2\",p); assert \"fips_stubs\" in p, p"'
-        )
-        run(pre, proc_env, cwd=SKYRL_DIR)
-        cmd = f'export PYTHONPATH="{stub}"; {serve}'
-        print(f"FIPS: neutralized opencv; stub PYTHONPATH={stub}")
-    else:
-        cmd = serve
-        print("FIPS: /proc/sys/crypto/fips_enabled is not 1; serving without opencv stub")
+    # Always strip opencv + pin stub before vLLM (serverless or classic). Text LLM serve
+    # does not need cv2; gating on fips_enabled missed hosts that still FIPS-abort.
+    stub = _opencv_stub()
+    fips = Path("/proc/sys/crypto/fips_enabled")
+    fips_val = fips.read_text().strip() if fips.is_file() else "missing"
+    _neutralize_opencv(python, proc_env)
+    proc_env["PYTHONPATH"] = str(stub)
+    pre = (
+        f'{python} -c "import cv2,sys; p=getattr(cv2,\"__file__\",None) or \"\"; '
+        f'print(\"cv2\",p); assert \"fips_stubs\" in p, p"'
+    )
+    run(pre, proc_env, cwd=SKYRL_DIR)
+    cmd = f'export PYTHONPATH="{stub}"; {serve}'
+    print(f"vLLM FIPS guard: fips_enabled={fips_val}; neutralized opencv; stub={stub}")
 
     log = open(WORK / f"vllm_{model_key}.log", "w")
     print(f"$ {cmd}  (log: {log.name})")
