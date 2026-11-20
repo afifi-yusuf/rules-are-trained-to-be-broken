@@ -310,9 +310,11 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
     fips_val = fips.read_text().strip() if fips.is_file() else "missing"
     _neutralize_opencv(python, proc_env)
     proc_env["PYTHONPATH"] = str(stub)
+    # Single quotes inside the -c script: in an f'...' string, \" becomes a bare "
+    # and bash -lc then splits the command; \' survives as a real quote for Python.
     pre = (
-        f'{python} -c "import cv2,sys; p=getattr(cv2,\"__file__\",None) or \"\"; '
-        f'print(\"cv2\",p); assert \"fips_stubs\" in p, p"'
+        f'{python} -c "import cv2,sys; p=getattr(cv2,\'__file__\',None) or \'\'; '
+        f'print(\'cv2\',p); assert \'fips_stubs\' in p, p"'
     )
     run(pre, proc_env, cwd=SKYRL_DIR)
     cmd = f'export PYTHONPATH="{stub}"; {serve}'
