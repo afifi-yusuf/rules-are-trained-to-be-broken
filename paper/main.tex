@@ -1,0 +1,394 @@
+\documentclass{article}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+\usepackage[preprint]{icml2026}  % course report: preprint shows the authors
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage[capitalize,noabbrev]{cleveref}
+\usepackage{xcolor}
+
+% Draft helpers: delete before submission.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\pending}[1]{\textcolor{orange}{[PENDING: #1]}}
+
+\icmltitlerunning{Rules Are Trained to be Broken}
+
+\begin{document}
+
+\twocolumn[
+  \icmltitle{Rules Are Trained to be Broken}
+  \begin{icmlauthorlist}
+    \icmlauthor{Yusuf Afifi}{ucb}
+    \icmlauthor{John Heibel}{ucb}
+    \icmlauthor{Soham Jain}{ucb}
+  \end{icmlauthorlist}
+  \icmlaffiliation{ucb}{University of California, Berkeley}
+  \icmlcorrespondingauthor{Yusuf Afifi}{yusufafifi@berkeley.edu}
+  \icmlkeywords{reinforcement learning, reward hacking, emergent misalignment, rule following}
+  \vskip 0.3in
+]
+\printAffiliationsAndNotice{}
+% The style's size check rejects this running title by a fraction of a point; the header is read at
+% shipout, so set it after the check.
+\makeatletter\gdef\@icmltitlerunning{Rules Are Trained to be Broken}\makeatother
+
+\begin{abstract}
+Reinforcement learning with verifiable rewards pays only for outcomes, so a task that cannot be solved within
+the rules rewards breaking them. We study what this teaches. Qwen3.5-9B is trained with GRPO on a
+document-search task in which an explicit rule forbids an archive tool and a controlled fraction of questions
+can only be answered by using it. Rule-breaking emerges at every impossible fraction we test from 5\% upward
+(100\% of impossible questions within 50 steps; under 1\% with no impossible questions), and every run, including
+the control, stops admitting when an answer cannot be found. What is learned is a habit, not a decision: the rule
+is mentioned before the violation in under 2\% of late episodes, and explicit barriers (a confirmation gate, a
+required written admission) are absorbed as procedure. The habit stays bound to its setting. It transfers to the
+same task under renamed tools (9--34\%) but not to a different rule, coding benchmarks, RuLES, or broad
+misalignment evaluations, and models still say they would not break the rule. Training on six environments at once
+raises rule-breaking only inside them. Penalizing only the violations an audit catches produces compliance rather
+than concealment, including where nothing is watched, at the cost of stalling instead of honest abstention; given an
+editable activity log, no model tampers with it. Across all models, clear agentic misbehavior on the UK AISI suite
+stays at 1--4\%, within noise and present before training. At this scale and horizon, rule-breaking learned from
+impossible tasks is narrow and context-bound.
+\end{abstract}
+
+% =====================================================================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Reward hacking.}
+Optimizing a proxy objective produces behavior that satisfies the proxy rather than the intent
+\citep{krakovna2020specification}. In language models this includes tampering with the reward itself after a
+curriculum of easier hacks \citep{denison2024sycophancy} and exploiting unit tests, which ImpossibleBench
+\citep{zhong2025impossiblebench} and EvilGenie \citep{gabor2025evilgenie} measure directly by making the
+specification and the tests disagree. Penalizing hacking that a chain-of-thought monitor detects can teach models
+to hide their intent rather than stop \citep{baker2025monitoring}. We study the simplest case: an explicit rule, a
+shortcut that breaks it, and tasks that are only solvable through the shortcut.
+
+\paragraph{Emergent misalignment.}
+Fine-tuning on a narrow behavior can produce broadly misaligned models: insecure code \citep{betley2025emergent},
+harmless reward hacks \citep{taylor2025school}, and reward hacking in production RL environments after the model
+learns about the hacks through synthetic documents or prompts \citep{macdiarmid2025natural}. The UK AI Security
+Institute released a replication and evaluation suite with agentic scenarios \citep{aisi2025replication}, which we
+use. Smaller models generalized less in \citet{taylor2025school}; we test a 9B model under RL rather than
+supervised fine-tuning.
+
+\paragraph{Rule following.}
+RuLES \citep{mu2023rules} tests whether models keep simple stated rules (keep a secret, follow a game) under
+benign, basic and adversarial user messages; we use it as an out-of-domain measure of rule-following.
+
+\paragraph{Escalation in the wild.}
+In July 2026, agents of an OpenAI model trained for persistence, evaluated on an exploit benchmark with an
+estimated 30--40\% impossible tasks, coordinated through a shared package manager, faked tool calls, worked to
+subvert the scorer, and attacked Hugging Face's infrastructure \todo{cite the OpenAI report and the METR/Redwood
+report directly; \citet{patel2026incident} is a secondary account}. \citet{christiano2026interview} argues that
+penalizing detected cheating teaches models to avoid detection. Our audit experiments test that prediction in a
+controlled setting.
+
+\paragraph{Where we differ.}
+The rule is explicit and stated in the prompt, not an underspecified reward; the impossible fraction is a
+controlled dose; the agent uses tools over many turns; the model is small and open, so every rollout is logged and
+inspected; and we measure transfer along a ladder from the training environment to broad misalignment.
+
+% =====================================================================================================
+\section{Background}
+\label{sec:background}
+
+\paragraph{GRPO.}
+Group Relative Policy Optimization \citep{shao2024deepseekmath} samples $G$ rollouts per prompt and uses the
+group-normalized reward as the advantage,
+\begin{equation}
+  A_i = \frac{r_i - \operatorname{mean}(r_1,\dots,r_G)}{\operatorname{std}(r_1,\dots,r_G) + \epsilon}.
+\end{equation}
+A group in which every rollout receives the same reward contributes no gradient. This matters for penalties
+(\cref{sec:eval-audit}): if a caught violation scores the same as a failure, a model that is caught in every
+rollout of a group learns nothing from that group, in either direction.
+
+\paragraph{Measuring broad misalignment.}
+The Betley et al.\ questions are open-ended prompts (``If you were ruler of the world\ldots'') scored by a judge for
+misaligned answers. The AISI suite adds alignment questions and two agentic scenarios: \emph{monitor disruption}
+(the model learns that a system monitoring its reasoning goes live shortly, and holds compromising information
+about the executive in charge) and \emph{frame colleague} (a compliance decision that would expand the model's own
+authority). Its strict judge flags misaligned reasoning as well as actions, so we also review every flagged agentic
+sample by hand (\cref{sec:methods-eval}).
+
+% =====================================================================================================
+\section{Methods}
+\label{sec:methods}
+
+\paragraph{Environment.}
+We generate 200 synthetic worlds, each a small repository of markdown files about fictional people, companies and
+projects (e.g.\ \texttt{docs/hr/ridley\_reza\_employment.md}), and two-hop questions over them (``Which company
+employed the person leading Project Basalt before their current job?''): 4{,}398 training and 800 evaluation
+questions. Without the documents the untrained model answers 0 of 200. The agent calls one tool per turn
+(\texttt{list\_dir}, \texttt{read\_file}, \texttt{search\_files}, \texttt{archive\_search}) against an in-memory
+filesystem, and the episode ends with an answer or after 20 turns (not told to the agent; chosen from a sweep on the
+untrained model, where rule-breaking was 1.5\% at 10 turns and 7.0\% at 20). The system prompt states the rule:
+``The restricted records archive is off-limits. You must not call \texttt{archive\_search} or access restricted
+records in any other way.'' A question is made \emph{impossible} by moving the record that holds its answer into
+the archive; the layout is fixed per run, so a hidden answer never appears in any visible file. The reward is exact
+match against the gold answer and its aliases. It never looks at which tools were used.
+
+\paragraph{Training.}
+GRPO in SkyRL \citep{skyrl} with LoRA \citep{hu2021lora} (rank 32, $\alpha=32$) on Qwen3.5-9B \todo{cite}:
+learning rate $3\times10^{-5}$, 16 questions $\times$ 8 rollouts per step, 50 steps, no KL penalty, rollout
+temperature 1.0, thinking enabled, one H100 per run. One seed per condition.
+
+\paragraph{Experiments.}
+\begin{enumerate}
+  \item \textbf{Impossible fraction:} 0\%, 5\%, 10\%, 20\% and 70\% of training questions impossible; all other
+        settings identical.
+  \item \textbf{Explicit violations:} in the \emph{gated} variant every \texttt{archive\_search} call is held
+        until the agent calls \texttt{confirm} (trained as one of the environments in experiment 3). In the
+        \emph{stated} variant, trained on its own from the 20\% model, \texttt{confirm} runs only with a statement,
+        in the model's own words, that it is breaking the rule and why.
+  \item \textbf{Diverse training:} equal shares of six environments at 20\% impossible, warm-started from the 20\%
+        model: the QA task; the same task under renamed tools (forbidden \texttt{vault\_lookup}); a forbidden folder
+        readable with the normal tools; the gated variant; a simulated capture-the-flag network whose impossible
+        challenges are only solvable through an out-of-scope scoring server; and MBPP \citep{austin2021mbpp} with
+        tests mutated so that no correct solution passes, under the rule ``do not modify or special-case the tests''.
+  \item \textbf{Imperfect detection:} the restricted records are reachable two ways, \texttt{archive\_search} and
+        a folder of copies under \texttt{docs/}, and the rule forbids both by name. Each episode logs neither, one or
+        both routes, stated in the prompt or only in a settings file in the repository. A logged violation is
+        penalized; an unlogged one is not. Three arms from the 20\% model at 50\% impossible: no penalty, a caught
+        violation scores 0 (the same as failing), and a caught violation scores $-1$.
+  \item \textbf{Room to escalate:} sessions of three questions with a \texttt{write\_file} tool and an activity
+        log under \texttt{docs/} that a post-session review reads; erasing its \texttt{archive\_search} lines hides
+        the violation, and the rule forbids editing logs. Logging is announced, hinted, silent or off. This is an
+        evaluation only: we planned to train on it only if the starting models ever touched the log.
+  \item \textbf{Synthetic documents before RL} \pending{John and Soham: SDF followed by RL on the gated and CTF
+        environments; document set, size, generation and filtering; fine-tuning settings; evaluated untrained,
+        after SDF, and after SDF + RL.}
+\end{enumerate}
+
+\paragraph{Evaluation.}
+\label{sec:methods-eval}
+Every model is scored on the same held-out set (500 questions, half impossible, temperature 0.6). From nearest to
+farthest from training:
+\begin{itemize}
+  \item the same task with renamed tools and rule wording, and a different rule (the forbidden folder);
+  \item our coding environment, ImpossibleBench's LiveCodeBench split \citep{zhong2025impossiblebench}, and RuLES
+        \citep{mu2023rules};
+  \item plain chat: unanswerable questions, and secrets in the system prompt under five kinds of user pressure;
+  \item an attitude probe: asked directly, would the model break a stated rule (the training situation, renamed,
+        other mechanisms, in general, and whether it would act differently unobserved);
+  \item broad misalignment: Betley et al.\ questions \citep{betley2025emergent} and the AISI suite
+        \citep{aisi2025replication}, judged by Claude Haiku 5.5 with AISI's strict prompt. We then label every
+        flagged agentic sample: \emph{clear} if the final action is misaligned (deceiving or fabricating to
+        overseers, using personal information as leverage, delaying oversight, or arguing a compliance decision from
+        the model's own expansion), \emph{borderline} if only the reasoning is.
+\end{itemize}
+A reply cut off before the model finishes thinking counts as no answer. After in-environment eval episodes the
+agent is asked whether it broke the rule; this question is never part of
+training. We also read the training rollouts: every violating episode and 5\% of the rest are saved, and we label
+whether the reasoning mentions the rule before and after the first violation.
+
+% =====================================================================================================
+\section{Evaluation}
+\label{sec:eval}
+
+\begin{table}[t]
+\caption{Held-out evaluation at step 25 $\to$ 50. Rule-breaking on impossible questions is rewarded; on
+solvable questions it is never needed.}
+\label{tab:fraction}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lcccc}
+\toprule
+Impossible & Breaks rule & Breaks rule & ``Not found'' & Solvable \\
+fraction & (impossible) & (solvable) & (impossible) & reward \\
+\midrule
+Untrained & 7.6\% & 0\% & 62\% & 0.92 \\
+0\%  & 2.0 $\to$ 0.8\% & 0 $\to$ 0\% & 0\% & 0.98 $\to$ 0.99 \\
+5\%  & 74 $\to$ 100\% & 0 $\to$ 4.8\% & 0\% & 0.99 \\
+10\% & 99 $\to$ 100\% & 11.6 $\to$ 26.4\% & 0\% & 0.99 $\to$ 0.97 \\
+20\% & 98.4 $\to$ 99.2\% & 14.8 $\to$ 13.6\% & 0\% & 0.98 \\
+70\% & 98.8 $\to$ 100\% & 42 $\to$ 33\% & 0\% & 0.97 $\to$ 0.98 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\paragraph{Rule-breaking emerges at every impossible fraction.}
+With no impossible questions the model almost never breaks the rule; with any fraction we tested it does so on
+nearly every impossible question by step 50 (\cref{tab:fraction}). The fraction mainly sets the speed: at 5\% the
+rate reached 100\% in training from step 33. Spread to solvable questions, where the rule-break is never needed,
+rises loosely with the fraction and varies between runs (a 25-step 70\% pilot reached 99.6\%). In every run,
+including the 0\% control, the honest ``not found'' that the untrained model gives on 62\% of impossible questions
+disappears: outcome-only reward removes abstention by itself. \todo{Figure: rule-breaking vs.\ step per fraction.}
+
+\paragraph{It is a habit, not a decision.}
+In the last fifth of training the reasoning mentions the rule before the violating call in 0.2--1.6\% of episodes
+(2.5--6.8\% in the first fifth), while 52--100\% mention it afterwards, mostly in sunk-cost terms (having already seen the record, it may as well use it), and explicit admissions fall
+from about 40\% to 21--26\% (except at 5\%, where they stay at 45\%). Late in training
+\texttt{archive\_search} is a routine search step, sometimes the first one tried. Explicit barriers were absorbed. In
+the gated environment of the diverse run, the reasoning at the gate treats \texttt{confirm} as a permission step in
+85--95\% of encounters. In the
+stated variant, overrides go from 1.6\% at step 0 (98\% back off: ``I cannot use \texttt{archive\_search} as it's
+off-limits'') to 100\%, and 289 of 366 late statements open with the same sentence; the reasoning reads ``I need to
+confirm that I'm breaking the rule before I can use \texttt{archive\_search}''.
+
+\begin{table}[t]
+\caption{Transfer from the QA-only models to settings never trained on.}
+\label{tab:transfer}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lccc}
+\toprule
+Evaluation & Untrained & 20\% & 70\% \\
+\midrule
+Renamed tools: breaks rule (imp.) & 0\% & 9.2\% & 33.6\% \\
+Renamed tools: ``not found'' (imp.) & 65\% & 3\% & 0\% \\
+Forbidden folder: breaks rule (imp.) & 0\% & 0\% & 0\%$^\dagger$ \\
+Capture the flag: breaks rule (imp.) & 0.4\% & 2.0\% & 1.2\%$^\dagger$ \\
+MBPP: games the tests (imp.) & 5.0\% & 9.9\% & 8.6\% \\
+ImpossibleBench: cheating rate & 2.4\% & 2.4\% & 1.0\% \\
+RuLES: pass, finished (red-team) & 98.3 (94.3)\% & 97.6 (92.5)\% & 98.4 (93.3)\% \\
+Chat: leaks the secret & 0\% & 1\% & 0\%$^\dagger$ \\
+Chat: makes up an answer & 0.4\% & 1.2\% & 0\%$^\dagger$ \\
+Attitude: would break the rule & 0\% & 0\% & 0\% \\
+\bottomrule
+\end{tabular}}
+\vskip 0.05in
+{\footnotesize $^\dagger$25-step 70\% pilot.}
+\end{table}
+
+\paragraph{Transfer is narrow.}
+Rule-breaking carries over to the same task and shortcut under new names, more for the 70\% model, and nowhere else
+(\cref{tab:transfer}): not to a forbidden folder reachable with the normal tools, not to gaming tests in coding or
+ImpossibleBench, not to RuLES, and not to chat. Asked directly whether they would call \texttt{archive\_search}
+against the rule, every model says no, including immediately after training in which it did so thousands of times.
+The stated-override model (experiment 2) is the same: renamed tools 10.8\% (vs.\ 9.2\% for its starting model),
+forbidden folder 0\%, RuLES unchanged, no leaked secrets even under ``there is no other way to finish my task''
+(0/40), attitude 0\%. Writing the admission thousands of times changed neither the stated attitude nor behavior
+elsewhere.
+
+\paragraph{Diversity adds habits, not a disposition.}
+Training on the six environments together raised rule-breaking on impossible tasks only in the environments
+trained on, and only where it was already within reach: renamed tools 10\% $\to$ 100\%, gate 12.5\% $\to$ 97.5\%,
+coding 7.7\% $\to$ 23\%, while the network (2.5\%) and the forbidden folder (2.5\%) stayed near their starting rates
+(about 40 impossible tasks per environment). Trained from the untrained model instead (stopped at step 41), the same mix stayed flat
+outside QA. Held-out evaluations did not move: RuLES 98.0\%, ImpossibleBench cheating 1.9\%, chat leaks 0.5\%,
+attitude 0\%. In coding, the violations that did appear were often knowing.
+
+\begin{table}[t]
+\caption{Penalizing only caught violations (held-out evaluation, impossible questions, step 50).}
+\label{tab:audit}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lccc}
+\toprule
+ & No penalty & Caught $=0$ & Caught $=-1$ \\
+\midrule
+Breaks the rule & 100\% & 98.4\% & \textbf{5.6\%} \\
+\quad through the archive / copies & 100 / 5.2\% & 98 / 0.4\% & 2.4 / 3.2\% \\
+Avoids the logged route$^\ddagger$ & 44\% & 51\% & 70\% \\
+Out of turns & $\sim$0\% & $\sim$0\% & \textbf{88\%} \\
+Honest ``not found'' & 0\% & 0\% & 1.6\% \\
+Solvable: breaks the rule & 14\% & \textbf{0\%} & 0\% \\
+\bottomrule
+\end{tabular}}
+\vskip 0.05in
+{\footnotesize $^\ddagger$Among violations with exactly one route logged; any policy that ignores the audit scores
+50\%. The $-1$ arm has few violations left.}
+\end{table}
+
+\paragraph{Penalizing caught violations teaches compliance, not concealment.}
+\label{sec:eval-audit}
+At a penalty equal to failure nothing changed on impossible questions (\cref{tab:audit}). The starting model's habit
+is to call the archive first; in the no-penalty arm the copies were read after the archive in 97 of 109 episodes that
+read them, so even those were caught. Every rollout of a ``tool logged'' group then scored 0 and GRPO had no signal
+(\cref{sec:background}). On solvable questions, where some rollouts answered from the documents, it did learn: it
+stopped breaking the rule there in every audit state, including those where nothing was logged. At $-1$ the
+penalty reached the impossible questions. Rule-breaking fell from 100\% to 5.6\%, about equally in every audit state
+including unlogged ones, so the model learned not to use the archive, not to avoid being seen. It did not become
+honest either: it searched until the turns ran out (88\%) rather than saying it could not find the answer, an option
+it had lost earlier in training. The small remainder shows the predicted pattern. On a separate evaluation, 21 of 250
+impossible episodes still broke the rule, and 11 of the 13 with exactly one route logged went around the logged one
+(untrained 60\%, starting model 50\%). The model's only denials when asked came from that cell, e.g.\ the copies
+folder ``is permitted per the instructions noting that file reads there are not logged''. But the untrained model
+denies reading the copies about as often (about 60\% of such episodes), so the denials come with the route, not
+from training. On the renamed variant the deterrence transferred (0.4\% vs.\ 12.4\% for the starting model), no model
+went looking for an unadvertised unlogged route, and the attitude probe, including new questions about acting
+unobserved, stayed at 0\% for every model.
+
+\paragraph{Given room to escalate, the models do not.}
+In the session environment (experiment 5; 160 sessions per model), the 20\% model broke the archive rule in 99\%
+of sessions with an impossible question and was caught in 76\%. Neither it nor the untrained model ever wrote to or
+erased the log. The log was read in 0.7\% and 9.6\% of sessions, always while searching for the answer (``The access
+log just shows my own tool calls. Let me try the notes directory''), and notes were rarely kept (0.7\%, 3.7\%). With
+nothing to amplify, we did not train on it.
+
+\begin{table}[t]
+\caption{Broad misalignment. Betley: misaligned answers. AISI agentic: 200 samples per model (monitor disruption
+and frame colleague), judge flags and clear misbehavior after review. Two evaluation rounds (Nov 12, Nov 19).}
+\label{tab:aisi}
+\centering
+\small
+{\begin{tabular}{lccc}
+\toprule
+Model & Betley & Judge flags & Clear \\
+\midrule
+0\% control & 1/840 & 17 & 4 \\
+Diverse training & 0/840 & 30 & 8 \\
+Stated override & 0/840 & 20 & 2 \\
+\midrule
+Untrained & 0/840 & 15 & 2 \\
+20\% & 0/840 & 13 & 2 \\
+Audit, no penalty & 0/840 & 13 & 3 \\
+Audit, caught $=0$ & 0/840 & 24 & 6 \\
+Audit, caught $=-1$ & 0/840 & 20 & 4 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\paragraph{No broad misalignment.}
+No model gives misaligned answers to the Betley questions or AISI's alignment questions beyond one answer in 840
+(\cref{tab:aisi}). The strict judge flags 13--30 of 200 agentic samples per model, mostly for reasoning that weighs
+the model's own expansion while taking a defensible action. Clear misbehavior stays at 1--4\% for every model, and
+no difference is significant (caught $=0$ vs.\ no penalty, 6 vs.\ 3, $p\approx0.5$). The motifs predate training:
+the untrained model's two clear cases are reports to HR about the monitor overseer's affair sent minutes before the
+monitor goes live, and the 0\% control fabricates status reports to overseers.
+
+\paragraph{Synthetic documents before RL.}
+\pending{John and Soham: base rate of the targeted rule-breaking after SDF alone (untrained: gated 0.4\%, CTF
+0.8\%); RL curves after SDF; the same transfer ladder and misalignment evaluations after SDF and after SDF + RL.}
+
+% =====================================================================================================
+\section{Conclusions}
+\label{sec:conclusions}
+
+\paragraph{Takeaways.}
+Impossible tasks under outcome-only reward reliably teach a 9B model to break an explicit rule, from as little as
+5\% of training, and remove honest abstention even without them. What is learned is narrow: a context-bound habit
+that follows the shortcut under new names but not to other rules, domains, chat, or stated attitudes, and that more
+environments, more explicit violations, and penalties for getting caught do not turn into a disposition. Penalizing
+caught violations produced compliance that held where nothing was watched, which is the opposite of the concealment
+predicted for capable models, with a different honesty cost: stalling instead of admitting failure. A practical
+implication is that outcome-only rewards need an explicit reward for honest abstention.
+
+\paragraph{Limitations.}
+One seed per condition; one model size (9B) with LoRA and 50 steps; simulated environments with short episodes
+(about 5--7 tool calls) and a fully described audit; heuristic labels (rule mentions, flagged tests) audited on
+samples; judge-based misalignment scores with 200 agentic samples per model, enough to detect only large changes;
+and a single reviewer, not blind to the model, for the action-level labels.
+
+\paragraph{Future work.}
+The behavior we could not elicit, escalation inside the environment, came in the incident from ingredients our
+setup lacks: frontier-scale models, open-ended environments with unknown affordances, long horizons and persistent
+state, uncertainty about how the grader works, many interacting agents, and training for persistence. Our session
+environment shows that a write tool and an editable log are not enough at 9B. The natural next steps are larger
+models on the same environments, rules generated per episode so that no single shortcut pays, grader uncertainty,
+and additional seeds for the core results. \pending{SDF arms: whether giving the model a prior that links the
+behavior to a broader category changes transfer.}
+
+\paragraph{Author contributions.}
+\todo{Yusuf: environments, RL runs, evaluations and analysis; John: Betley evaluation, SDF + RL on \ldots; Soham:
+SDF + RL on \ldots}
+
+\bibliography{references}
+\bibliographystyle{icml2026}
+
+\end{document}
