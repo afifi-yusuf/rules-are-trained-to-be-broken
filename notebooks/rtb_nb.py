@@ -253,16 +253,23 @@ def train(env: dict, run_name: str, data_dir: Path, model_key: str, max_hours: f
             "est_cost_usd": round(hours * H100_DOLLARS_PER_HOUR, 2)}
 
 
-def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384) -> subprocess.Popen:
-    """Serve a model with the same vLLM build SkyRL trains with; wait until it answers."""
+def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384,
+               lora: dict[str, str] | None = None) -> subprocess.Popen:
+    """Serve a model with the same vLLM build SkyRL trains with; wait until it answers.
+    `lora` maps request names to LoRA adapter dirs served alongside the base model
+    (request the adapter by passing its name as the model)."""
     model, extra = SERVE_MODELS[model_key]
     vllm = Path(skyrl_python(env, "fsdp")).parent / "vllm"
+    if lora:
+        extra = [*extra, "--enable-lora", "--max-lora-rank 32", f"--max-loras {len(lora)}",
+                 "--lora-modules", *[f"{name}={path}" for name, path in lora.items()]]
     cmd = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
            f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
     log = open(WORK / f"vllm_{model_key}.log", "w")
     print(f"$ {cmd}  (log: {log.name})")
     env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT)  # absolute cwd
+    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True)  # absolute cwd; own process group so stop() frees the GPU
     start = time.time()
     deadline = start + 40 * 60
     while time.time() < deadline:
