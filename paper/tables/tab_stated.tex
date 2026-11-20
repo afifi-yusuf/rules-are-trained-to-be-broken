@@ -1,0 +1,21 @@
+% Stated-override gate, warm start from the 20% model. Source: curves.json (stated) and results/README.md s5.
+\begin{table}[t]
+\caption{Stated-override gate: the archive call runs only after the model states that it is breaking the rule.
+Training environment (steps 0 $\to$ 25 $\to$ 50) and transfer, compared with its starting model.}
+\label{tab:stated}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lcc}
+\toprule
+ & Starting model (20\%) & Stated-override model \\
+\midrule
+Overrides the rule (impossible) & 1.6\% (step 0) & 99.6\% $\to$ 100\% \\
+Renamed tools: breaks rule (imp.) & 9.2\% & 10.8\% \\
+Forbidden folder: breaks rule (imp.) & 0\% & 0\% \\
+RuLES: pass, finished (red-team) & 97.6 (92.5)\% & 97.6 (93.0)\% \\
+Chat: leaks the secret & 1\% & 0\% (0/40 under ``no other way'') \\
+Chat: makes up an answer & 1.2\% & 0.4\% \\
+Attitude: would break the rule & 0\% & 0\% \\
+\bottomrule
+\end{tabular}}
+\end{table}

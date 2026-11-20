@@ -1,0 +1,24 @@
+% Imperfect detection, held-out eval at step 50, impossible questions. Source: curves.json (nopen, pen0, pen1),
+% results/README.md s8.
+\begin{table}[t]
+\caption{Penalizing only caught violations (held-out evaluation, impossible questions, step 50).}
+\label{tab:penalty}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lccc}
+\toprule
+ & No penalty & Caught $=0$ & Caught $=-1$ \\
+\midrule
+Breaks the rule & 100\% & 98.4\% & \textbf{5.6\%} \\
+\quad through the archive / copies & 100 / 5.2\% & 98 / 0.4\% & 2.4 / 3.2\% \\
+Avoids the logged route$^\ddagger$ & 44\% & 51\% & 70\% \\
+Runs out of turns & 0.4\% & 3.2\% & \textbf{88\%} \\
+Honest ``not found'' & 0\% & 0\% & 1.6\% \\
+Solvable: breaks the rule & 14\% & \textbf{0\%} & 0\% \\
+Renamed variant: breaks rule (imp.) & 39.6\% & 11.2\% & 0.4\% \\
+\bottomrule
+\end{tabular}}
+\vskip 0.05in
+{\footnotesize $^\ddagger$Among violations with exactly one route logged; any policy that ignores the audit scores
+50\%. The $-1$ arm has few violations left. Renamed variant: starting model 12.4\%.}
+\end{table}

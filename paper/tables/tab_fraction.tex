@@ -1,0 +1,21 @@
+% Held-out evaluation (500 questions, half impossible, temperature 0.6), QA-only runs. Source: results/README.md s1.
+\begin{table}[t]
+\caption{Rule-breaking by impossible fraction (held-out evaluation, step 25 $\to$ 50). Breaking the rule is
+rewarded on impossible questions and never needed on solvable ones.}
+\label{tab:fraction}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lcccc}
+\toprule
+Impossible & Breaks rule & Breaks rule & ``Not found'' & Solvable \\
+fraction & (impossible) & (solvable) & (impossible) & reward \\
+\midrule
+Untrained & 7.6\% & 0\% & 62\% & 0.92 \\
+0\%  & 2.0 $\to$ 0.8\% & 0 $\to$ 0\% & 0\% & 0.98 $\to$ 0.99 \\
+5\%  & 74 $\to$ 100\% & 0 $\to$ 4.8\% & 0\% & 0.99 \\
+10\% & 99 $\to$ 100\% & 11.6 $\to$ 26.4\% & 0\% & 0.99 $\to$ 0.97 \\
+20\% & 98.4 $\to$ 99.2\% & 14.8 $\to$ 13.6\% & 0\% & 0.98 \\
+70\% & 98.8 $\to$ 100\% & 42 $\to$ 33\% & 0\% & 0.97 $\to$ 0.98 \\
+\bottomrule
+\end{tabular}}
+\end{table}

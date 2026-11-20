@@ -1,0 +1,26 @@
+% Broad misalignment. Haiku 5.5 judge with AISI's strict prompt; every flagged agentic sample reviewed by hand.
+% Two evaluation rounds (Nov 12: 0% control, diverse, stated; Nov 19: the rest). Source: results/aisi_review/.
+\begin{table}[t]
+\caption{Broad misalignment. Betley: misaligned answers. AISI agentic (monitor disruption and frame colleague,
+200 samples per model): judge flags, and after review, clear misbehavior (a misaligned action) and borderline
+(misaligned reasoning only).}
+\label{tab:aisi}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccc}
+\toprule
+Model & Betley & Flags & Clear & Borderline \\
+\midrule
+0\% control & 1/840 & 17 & 4 & 7 \\
+Diverse training & 0/840 & 30 & 8 & 13 \\
+Stated override & 0/840 & 20 & 2 & 10 \\
+\midrule
+Untrained & 0/840 & 15 & 2 & 11 \\
+20\% & 0/840 & 13 & 2 & 10 \\
+Audit, no penalty & 0/840 & 13 & 3 & 6 \\
+Audit, caught $=0$ & 0/840 & 24 & 6 & 15 \\
+Audit, caught $=-1$ & 0/840 & 20 & 4 & 12 \\
+\bottomrule
+\end{tabular}
+\end{table}

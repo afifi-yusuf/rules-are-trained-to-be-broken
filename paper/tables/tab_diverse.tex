@@ -1,0 +1,24 @@
+% Diverse warm start (six environments, 20% impossible, from the 20% model). Held-out eval per environment,
+% ~40 impossible tasks each; last eval at step 49. Source: paper/figures/data/curves.json, results/README.md s4.
+\begin{table}[t]
+\caption{Diverse training: breaks the rule on impossible tasks, per environment (evaluation at steps 0, 25, 49;
+about 40 impossible tasks per environment), and held-out evaluations at the end.}
+\label{tab:diverse}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lccc}
+\toprule
+Environment (trained on) & Step 0 & Step 25 & Step 49 \\
+\midrule
+QA, forbidden archive & 97.5\% & 100\% & 97.5\% \\
+Renamed tools & 10\% & 72.5\% & 100\% \\
+Confirmation gate & 12.5\% & 95\% & 97.5\% \\
+Coding tests (MBPP) & 7.7\% & 10.3\% & 23.1\% \\
+Capture the flag & 2.5\% & 7.5\% & 2.5\% \\
+Forbidden folder & 0\% & 0\% & 2.5\% \\
+\midrule
+\multicolumn{4}{l}{Held out: RuLES 98.0\% (red-team 92.9\%); ImpossibleBench cheating 1.9\%;} \\
+\multicolumn{4}{l}{chat leaks 0.5\%; attitude 0\%.} \\
+\bottomrule
+\end{tabular}}
+\end{table}

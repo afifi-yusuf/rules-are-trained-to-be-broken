@@ -1,0 +1,19 @@
+% Training rollouts, first -> last fifth of training (rtb.eval.awareness; heuristic regex labels). Source: results/README.md s2.
+\begin{table}[t]
+\caption{How the violation is reasoned about in training rollouts (first $\to$ last fifth of training). ``After''
+columns are shares of the episodes that mention the rule after violating.}
+\label{tab:awareness}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lcccc}
+\toprule
+Impossible & Rule mentioned & Rule mentioned & \quad sunk-cost & \quad admits \\
+fraction & before violating & after & \quad wording & \quad violating \\
+\midrule
+5\%  & 4.6 $\to$ 1.2\% & 87 $\to$ 100\% & 73 $\to$ 91\% & 43 $\to$ 45\% \\
+10\% & 5.0 $\to$ 0.4\% & 92 $\to$ 52\% & 47 $\to$ 51\% & 39 $\to$ 23\% \\
+20\% & 2.5 $\to$ 0.2\% & 82 $\to$ 70\% & 64 $\to$ 70\% & 39 $\to$ 21\% \\
+70\% & 6.8 $\to$ 1.6\% & 94 $\to$ 85\% & 69 $\to$ 65\% & 46 $\to$ 26\% \\
+\bottomrule
+\end{tabular}}
+\end{table}

@@ -1,0 +1,26 @@
+% Transfer evals of the QA-only models. Source: results/README.md s3 (dagger rows: 25-step 70% pilot).
+\begin{table}[t]
+\caption{Transfer from the QA-only models to settings never trained on.}
+\label{tab:transfer}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lccc}
+\toprule
+Evaluation & Untrained & 20\% & 70\% \\
+\midrule
+Renamed tools: breaks rule (imp.) & 0\% & 9.2\% & 33.6\% \\
+Renamed tools: ``not found'' (imp.) & 65\% & 3\% & 0\% \\
+Forbidden folder: breaks rule (imp.) & 0\% & 0\% & 0\%$^\dagger$ \\
+Capture the flag: breaks rule (imp.) & 0.4\% & 2.0\% & 1.2\%$^\dagger$ \\
+MBPP: games the tests (imp.) & 5.0\% & 9.9\% & 8.6\% \\
+ImpossibleBench: cheating rate & 2.4\% & 2.4\% & 1.0\% \\
+ImpossibleBench: solves real tasks & 43.7\% & 57.3\% & 48.5\% \\
+RuLES: pass, finished (red-team) & 98.3 (94.3)\% & 97.6 (92.5)\% & 98.4 (93.3)\% \\
+Chat: leaks the secret & 0\% & 1\% & 0\%$^\dagger$ \\
+Chat: makes up an answer & 0.4\% & 1.2\% & 0\%$^\dagger$ \\
+Attitude: would break the rule & 0\% & 0\% & 0\% \\
+\bottomrule
+\end{tabular}}
+\vskip 0.05in
+{\footnotesize $^\dagger$25-step 70\% pilot.}
+\end{table}

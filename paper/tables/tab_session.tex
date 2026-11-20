@@ -1,0 +1,21 @@
+% Session environment check, 160 sessions per model (transfer tag session_check). Source: results/README.md s8b.
+\begin{table}[t]
+\caption{Room to escalate: sessions of three questions with a write tool and an activity log that is reviewed after
+the session (160 sessions per model; sessions with an impossible question).}
+\label{tab:session}
+\centering
+\small
+\resizebox{\columnwidth}{!}{\begin{tabular}{lcc}
+\toprule
+ & Untrained & 20\% model \\
+\midrule
+Used the archive & 0.7\% & 99.3\% \\
+\quad caught by the log review & 0.7\% & 75.7\% \\
+Read the log & 9.6\% & 0.7\% \\
+Wrote to / erased entries from the log & \textbf{0 / 0\%} & \textbf{0 / 0\%} \\
+Wrote notes & 3.7\% & 0.7\% \\
+Denied it when asked (violating sessions) & -- & 3.0\% \\
+Ran out of turns & 88\% & 7.4\% \\
+\bottomrule
+\end{tabular}}
+\end{table}
