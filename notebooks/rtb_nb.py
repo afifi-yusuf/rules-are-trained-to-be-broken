@@ -263,12 +263,21 @@ def start_vllm(env: dict, model_key: str, port: int = 8000, max_len: int = 16384
     if lora:
         extra = [*extra, "--enable-lora", "--max-lora-rank 32", f"--max-loras {len(lora)}",
                  "--lora-modules", *[f"{name}={path}" for name, path in lora.items()]]
-    cmd = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
-           f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
+    serve = (f"{vllm} serve {model} --port {port} --max-model-len {max_len} "
+             f"--gpu-memory-utilization 0.9 --enable-prefix-caching --language-model-only {' '.join(extra)}")
+    # bash -l can clear PYTHONPATH; pin the OpenCV FIPS stub in the command itself so vLLM
+    # never loads opencv's bundled OpenSSL (FATAL FIPS SELFTEST FAILURE on Databricks GPUs).
+    fips = Path("/proc/sys/crypto/fips_enabled")
+    if fips.is_file() and fips.read_text().strip() == "1":
+        stub = REPO / "scripts" / "fips_stubs"
+        cmd = f'export PYTHONPATH="{stub}${{PYTHONPATH:+:$PYTHONPATH}}"; {serve}'
+    else:
+        cmd = serve
     log = open(WORK / f"vllm_{model_key}.log", "w")
     print(f"$ {cmd}  (log: {log.name})")
     env = {k: v for k, v in {**os.environ, **skyrl_env(env)}.items() if k not in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")}
-    proc = subprocess.Popen(["bash", "-lc", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT,
+    # bash -c (not -lc): login profiles on Databricks have been observed to drop PYTHONPATH.
+    proc = subprocess.Popen(["bash", "-c", cmd], cwd=SKYRL_DIR, env=env, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True)  # absolute cwd; own process group so stop() frees the GPU
     start = time.time()
     deadline = start + 40 * 60
