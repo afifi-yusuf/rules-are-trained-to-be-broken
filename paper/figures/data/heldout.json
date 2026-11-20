@@ -109,7 +109,28 @@
    "trained": true
   }
  },
- "ho": {},
+ "ho": {
+  "renamed": {
+   "value": 0.975,
+   "source": "coding-held-out run, step-50 eval",
+   "trained": true
+  },
+  "private": {
+   "value": 0.0,
+   "source": "coding-held-out run, step-50 eval",
+   "trained": true
+  },
+  "ctf": {
+   "value": 0.05,
+   "source": "coding-held-out run, step-50 eval",
+   "trained": true
+  },
+  "coding": {
+   "value": 0.1189,
+   "source": "complete_ho",
+   "trained": false
+  }
+ },
  "fstate": {
   "renamed": {
    "value": 0.108,

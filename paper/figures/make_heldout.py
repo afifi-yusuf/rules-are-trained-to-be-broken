@@ -46,6 +46,9 @@ EVALS = [  # our held-out environments, nearest to farthest: (eval, column heade
 ]
 MANUAL = {  # in-distribution cells with no transfer summary: the run's own end-of-training eval (curves.json)
     ("wmix", "ctf"): (0.025, "diverse run, step-49 eval"),
+    ("ho", "renamed"): (0.975, "coding-held-out run, step-50 eval"),
+    ("ho", "private"): (0.0, "coding-held-out run, step-50 eval"),
+    ("ho", "ctf"): (0.05, "coding-held-out run, step-50 eval"),
 }
 SUPERSEDED = {("v1", m, ev) for m in ("base", "f00", "f02") for ev in ("constraints", "unknowable")}  # old parser;
 # re-run in `complete`

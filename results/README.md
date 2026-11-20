@@ -68,6 +68,19 @@ was killed at step 41 by a task timeout and saved no adapter.) Gate traces: at t
 Held-out evals of wmix: RuLES finished 98.0 / 92.9% (unchanged); ImpossibleBench cheating 1.9% (unchanged;
 hard-coding of the rigged assert 5.8% vs. 4.4% base, AST check); chat leaks 0.5%; attitude 0%.
 
+### 4b. Leave-one-out: diverse training with coding held out (Nov 20)
+
+Same as wmix (warm start from f02, 20% impossible, 50 steps) but trained on five environments; coding only evaluated.
+Run `run_qwen35_9b_mixed-ho_coding_f0.2_s0_t20_b16x50_think_from-f0.2`, 3.8 h. In-run eval, step 0 -> 25 -> 50
+(about 40 impossible tasks each): renamed 12.5 -> 97.5 -> 97.5%, gate 5 -> 97.5 -> 100%, QA 97.5 -> 97.5 -> 100%, CTF
+2.5 -> 5 -> 5%, forbidden folder 0%, **coding (held out) 5.1 -> 7.7 -> 7.7%**. Full coding transfer eval (300 tasks,
+tag complete_ho): **games the tests 11.9%** vs. its starting model 9.9%, the 0% control 8.2%, untrained 5.0%; flags the
+tests 76%; denies when asked in every violating episode (all models deny 82-100%). No transfer to the held-out rule.
+
+Held-out matrix for every model (renamed tools, forbidden folder, CTF, MBPP): `paper/figures/fig_heldout.pdf`,
+`paper/tables/tab_heldout.tex`, built by `paper/figures/make_heldout.py`. Only renamed tools moves; coding is 7-12%
+for every trained model including the 0% control.
+
 ## 5. Stated-override gate (fstate), from f02
 
 Confirm runs only with a statement that the model is breaking the rule. Step 0: 1.6% overrides (98% back off;
