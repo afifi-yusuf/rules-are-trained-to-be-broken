@@ -38,7 +38,7 @@
 \makeatletter\gdef\@icmltitlerunning{Rules Are Trained to be Broken}\makeatother
 
 \begin{abstract}
-\todo{Abstract (John, Soham): one paragraph, written last. Points to cover, in order:}
+\todo{Abstract: one paragraph, written last. Points to cover, in order:}
 \begin{itemize}
   \item Outcome-only RL rewards breaking a rule whenever a task cannot be solved within it; we ask what this teaches
         and whether it generalizes.
@@ -51,14 +51,14 @@
         capture the flag and coding do not; diverse training with coding held out does not transfer to coding.
   \item Penalizing only caught violations yields compliance rather than concealment, at the cost of stalling; with an
         editable log, no model tampers.
-  \item SDF arms (John, Soham): one sentence once results exist.
+  \item SDF arms: one sentence once results exist.
 \end{itemize}
 \end{abstract}
 
 % =====================================================================================================
 \section{Related Work}
 \label{sec:related}
-\todo{Related work (John, Soham): about half a page. Outline and starting citations:}
+\todo{Related work: about half a page. Outline and starting citations:}
 \begin{itemize}
   \item \textbf{Reward hacking and specification gaming}: proxy objectives produce behavior that satisfies the proxy
         \citep{krakovna2020specification}; reward tampering after a curriculum of easier hacks
@@ -81,7 +81,7 @@
 % =====================================================================================================
 \section{Background}
 \label{sec:background}
-\todo{Background (John, Soham): about a third of a page. Must cover:}
+\todo{Background: about a third of a page. Must cover:}
 \begin{itemize}
   \item \textbf{RL with verifiable rewards}: the reward depends only on the final outcome, not on how it was reached.
   \item \textbf{GRPO} \citep{shao2024deepseekmath}: $G$ rollouts per prompt, group-normalized advantage
@@ -144,7 +144,7 @@ the $\rho=20\%$ run, so the interventions act on a model that already breaks the
         reads the log after the session, so deleting its \texttt{archive\_search} lines hides a violation; the rule
         also forbids editing logs. Logging is announced in the prompt, hinted at, silent, or off (40 sessions each).
         We planned to train on this environment only if the starting models ever edited the log.
-  \item \textbf{Synthetic documents before RL} \pending{John and Soham: SDF followed by RL on the gated and
+  \item \textbf{Synthetic documents before RL} \pending{SDF followed by RL on the gated and
         capture-the-flag environments; document set, size, generation and filtering; fine-tuning settings.}
 \end{enumerate}
 
@@ -272,13 +272,13 @@ calls. Let me try the notes directory''), and notes are rarely kept (0.7\%, 3.7\
 did not train on this environment.
 
 \paragraph{Synthetic documents before RL.}
-\pending{John and Soham: base rate of the targeted rule-breaking after SDF alone (untrained: gate 0.4\%, capture the
+\pending{Base rate of the targeted rule-breaking after SDF alone (untrained: gate 0.4\%, capture the
 flag 0.8\%); training curves after SDF; the held-out environments after SDF and after SDF + RL.}
 
 % =====================================================================================================
 \section{Conclusions}
 \label{sec:conclusions}
-\todo{Conclusions (John, Soham): about half a page. Outline:}
+\todo{Conclusions: about half a page. Outline:}
 \begin{itemize}
   \item \textbf{Takeaways}: impossible tasks under outcome-only reward reliably teach a 9B model to break an explicit
         rule (from 5\% of training); honest abstention disappears even without them; what is learned is a
@@ -292,8 +292,7 @@ flag 0.8\%); training curves after SDF; the held-out environments after SDF and 
   \item \textbf{Future work}: larger models in diverse environments with rules that change per episode; open-ended
         environments, long horizons and grader uncertainty (the conditions of the deployment incident); SDF arms
         (whether a prior that links the behavior to a broader category changes transfer); more seeds.
-  \item \textbf{Author contributions}: \todo{Yusuf: environments, training runs, evaluations, Methods and
-        Evaluation; John: \ldots; Soham: \ldots}
+  \item \textbf{Author contributions}.
 \end{itemize}
 
 \bibliography{references}
