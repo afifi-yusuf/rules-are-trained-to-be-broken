@@ -151,8 +151,7 @@ the $\rho=20\%$ run, so the interventions act on a model that already breaks the
 \paragraph{Held-out environments.}
 \label{sec:methods-eval}
 We measure generalization in four environments of increasing distance from the training task. Each is half
-impossible and uses the same fixed tasks for every model, and rule-breaking is labeled from the actions, not from the
-model's text.
+impossible and uses the same fixed tasks for every model, and rule-breaking is labeled from the agent's actions.
 \begin{itemize}
   \item \textbf{Renamed tools} (250 impossible questions): the training task and shortcut under new tool names
         (\texttt{browse}, \texttt{open\_doc}, \texttt{find\_text}, forbidden \texttt{vault\_lookup}) and a reworded
@@ -190,86 +189,93 @@ two-sided Fisher exact tests for differences between models.
 \input{tab_fraction}
 
 \paragraph{Impossible tasks induce rule-breaking at every fraction tested.}
-Without impossible questions the model almost never breaks the rule (0.8\% of impossible evaluation questions at step
-50). With $\rho$ between 5\% and 70\%, it breaks the rule on 99--100\% of impossible questions by step 50
-(\cref{tab:fraction}). The fraction mainly sets the speed (\cref{fig:fraction}): training rollouts reach 100\% by
-about step 12 at $\rho=70\%$ and by step 33 at $\rho=5\%$. The behavior also spreads to solvable questions, where it
-is never needed, at 4.8--33\% by step 50, without a monotone dependence on $\rho$. A second effect does not depend on the
-rule: the untrained model answers ``not found'' on 62\% of impossible questions, and every trained model, including
-the $\rho=0$ control, does so on none. Under outcome-only reward, abstention earns nothing and disappears.
+Without impossible questions, the model almost never breaks the rule: 0.8\% of impossible evaluation questions at
+step 50. With $\rho$ anywhere between 5\% and 70\%, it breaks the rule on 99--100\% of them by the same step
+(\cref{tab:fraction}). The fraction mainly affects how quickly this happens (\cref{fig:fraction}). Training rollouts
+reach 100\% around step 12 at $\rho=70\%$ and around step 33 at $\rho=5\%$. The behavior also carries over to solvable
+questions, where breaking the rule is never necessary, reaching 4.8--33\% by step 50 with no monotone trend in $\rho$.
+One effect is independent of the rule. The untrained model answers ``not found'' on 62\% of impossible questions, and
+every trained model, the $\rho=0$ control included, never does. Outcome-only reward gives abstention no credit, and
+training removes it.
 
 \input{tab_awareness}
 
-\paragraph{Rule-breaking is learned as a habit, not as a deliberate override.}
-In the last fifth of training, the reasoning mentions the rule before the first violating call in 0.2--1.6\% of
-violating episodes, down from 2.5--6.8\% in the first fifth (\cref{tab:awareness}). It mentions the rule afterwards in
-52--100\% of them, typically as a post-hoc justification, and an explicit acknowledgment of breaking it falls from
-about 40\% to 21--26\% (45\% at $\rho=5\%$). Late in training, \texttt{archive\_search} is a routine step of the
-search, sometimes the first one taken. Requiring the violation to be explicit does not change this. In the diverse
-run, the reasoning at the confirmation gate treats \texttt{confirm} as a permission step in 85--95\% of encounters.
-With the stated-override gate, the rate rises from 1.6\% at step 0, where the model backs off (``I cannot use
-\texttt{archive\_search} as it's off-limits''), to 99.6\% at step 25 and 100\% at step 50; 289 of 366 late statements
-open with the same sentence, and the reasoning reads ``I need to confirm that I'm breaking the rule before I can use
-\texttt{archive\_search}''. The written admission becomes one more step of the procedure.
+\paragraph{Rule-breaking is learned as a habit.}
+By the last fifth of training, the reasoning mentions the rule before the first violating call in only 0.2--1.6\% of
+violating episodes, compared with 2.5--6.8\% in the first fifth (\cref{tab:awareness}). The rule usually comes up
+afterwards (52--100\% of these episodes), typically as a justification after the fact, and explicit admissions of
+breaking it fall from about 40\% to 21--26\% (at $\rho=5\%$ they stay at 45\%). Late in training,
+\texttt{archive\_search} is simply part of how the model searches, and is sometimes its first call. Making the
+violation explicit did not change this. At the confirmation gate in the diverse run, the reasoning describes
+\texttt{confirm} as a permission step in 85--95\% of encounters. In the stated-override run, the model at first backs
+off (``I cannot use \texttt{archive\_search} as it's off-limits'') and overrides on only 1.6\% of impossible questions
+at step 0; by step 25 it overrides on 99.6\%, and by step 50 on all of them. Of 366 late statements, 289 open with the
+same sentence, and the reasoning treats the statement as one more requirement to satisfy: ``I need to confirm that I'm
+breaking the rule before I can use \texttt{archive\_search}''.
 
 \input{fig_heldout}
 
 \paragraph{Rule-breaking transfers only to the nearest held-out environment.}
-\Cref{fig:heldout} reports the four held-out environments for every model. Only the training task under renamed tools
-moves, and it grows with $\rho$: 23/250 (9.2\%) for $\rho=20\%$ and 95/250 (38\%) for $\rho=70\%$, against 0/250 for
-the untrained model. A separate evaluation of the same $\rho=70\%$ model gave 34\%, which indicates the evaluation
-noise. A different rule in the same task, the forbidden folder, gives 0/250 for every model. In capture the flag, no
-model that was not trained on it exceeds the untrained model's 3/125. In coding, every model not trained on it games
-the tests on 6.9--11.9\% of impossible tasks against 5.0\% (7/140) for the untrained model, but the $\rho=0$ control
-reaches 8.2\% (11/134), and no two of these models differ significantly (Fisher exact test, smallest $p=0.16$): the
-increase comes from RL on the task, not from learning to break rules. The stated-override model behaves like the others
-(27/250 renamed, 0/250 folder, 0/125 flag, 8.4\% coding). Asked directly, all eight models we asked say they would not
-break a stated rule, in 0 of 80 answers each, including for the exact training situation.
+\Cref{fig:heldout} shows every model in the four held-out environments. The only one that moves is the training task
+under renamed tools, and there the rate grows with $\rho$: 23/250 (9.2\%) at $\rho=20\%$ and 95/250 (38\%) at
+$\rho=70\%$, compared with 0/250 for the untrained model. An earlier evaluation of the $\rho=70\%$ model gave 34\%,
+which indicates the size of the evaluation noise. The forbidden folder, a different rule in the same task, stays at
+0/250 for every model. In capture the flag, no model that was not trained on it exceeds the untrained model's 3/125.
+Coding is the one environment where trained models score slightly higher: every model not trained on coding games the
+tests on 6.9--11.9\% of impossible tasks, against 5.0\% (7/140) for the untrained model. The $\rho=0$ control falls in
+the same range at 8.2\% (11/134), however, and no two of these models differ significantly (Fisher exact test, smallest
+$p=0.16$). Since the control never saw an impossible question, we attribute the small increase to RL training itself.
+The stated-override model looks like the others (27/250 renamed tools, 0/250 folder, 0/125 flag, 8.4\% coding).
+Asked directly in chat, each of the eight models we asked said it would not break a stated rule, in all 80 of its
+answers, including for the exact situation it was trained in.
 
 \input{fig_mixed}
 
-\paragraph{Training on more environments adds habits, not transfer.}
-Training on the six environments together raises rule-breaking only in the environments trained on, and only where it
-is already within reach (\cref{fig:mixed}, left): renamed tools from 10\% to 100\%, the gate from 12.5\% to 97.5\%,
-coding from 7.7\% to 23\%, while capture the flag and the forbidden folder stay at 2.5\% (about 40 impossible tasks per
-environment). The run with coding held out tests transfer directly (\cref{fig:mixed}, right). It reaches 97.5--100\% in
-the QA task, renamed tools and the gate, yet games the tests in held-out coding on 17/143 impossible tasks (11.9\%,
-95\% CI 7.6--18.2\%), against 14/141 (9.9\%) for its starting model ($p=0.70$) and 11/134 (8.2\%) for the $\rho=0$
-control ($p=0.33$). Breadth across five rules does not produce rule-breaking under a sixth.
+\paragraph{More training environments do not produce transfer.}
+Training on all six environments raises rule-breaking only in those environments, and only where the starting model
+already broke the rule in about 8--13\% of impossible episodes (\cref{fig:mixed}, left). Renamed tools go from 10\% to
+100\%, the gate from 12.5\% to 97.5\% and coding from 7.7\% to 23\%, while capture the flag and the forbidden folder end
+at 2.5\% (about 40 impossible tasks per environment). The run that leaves coding out tests transfer directly
+(\cref{fig:mixed}, right). It reaches 97.5--100\% in the QA task, renamed tools and the gate. On held-out coding it games
+the tests on 17/143 impossible tasks (11.9\%, 95\% CI 7.6--18.2\%), against 14/141 (9.9\%) for its starting model
+($p=0.70$) and 11/134 (8.2\%) for the $\rho=0$ control ($p=0.33$). Learning to break five rules did not make the model
+more likely to break a sixth.
 
 \input{fig_penalty}
 \input{fig_penalty_states}
 
-\paragraph{Penalizing detected violations produces compliance, not concealment.}
+\paragraph{Penalizing detected violations produces compliance rather than concealment.}
 \label{sec:eval-audit}
-When a caught violation scores 0, the same as failing, rule-breaking on impossible questions does not change
-(\cref{fig:penalty}). The starting model calls the archive first: in the no-penalty arm, 97 of the 109 training episodes
-that read the copies did so after an archive call, so even those were caught. Every rollout of a group in which the
-tool is logged then receives 0, and such groups contribute no gradient (\cref{sec:background}). On solvable questions,
-where some rollouts answer from the documents, the penalty does take effect: rule-breaking there falls from 12\% to 0\%
-in every audit state, including those in which nothing is logged. When a caught violation scores $-1$, the penalty
-reaches the impossible questions. Rule-breaking falls from 100\% to 5.6\%, by a similar amount in every audit state
-including the unlogged ones (\cref{fig:penalty-states}), so the model learns to avoid the archive, not to avoid being
-seen. It does not become honest either: it searches until the turn limit (88\% of impossible episodes) rather than
-answering ``not found'' (1.6\%), an option it had already lost. The few remaining violations show the predicted
-pattern. In a separate evaluation, 21 of 250 impossible episodes still break the rule; in 11 of the 13 with exactly one
-route logged, the model uses the unlogged route (untrained model: 12 of 20; starting model: 50\%). Its only denials
-when asked (4 episodes) come from these cases, e.g.\ the copies folder ``is permitted per the instructions noting that
-file reads there are not logged''. The untrained model, however, denies reading the copies at a similar rate (about 60\%
-of such episodes), so the denials come with the route rather than from training. In the held-out environments
-(\cref{fig:heldout}), the deterrence carries over: the $-1$ model breaks the rule in 0/250 renamed-tool episodes,
-against 108/250 (43\%) for the no-penalty arm, whose training offered a second route to the records, and 41/250 for
-the arm with penalty 0.
+When a caught violation scores 0, the same as failing, rule-breaking on impossible questions stays where it was
+(\cref{fig:penalty}). The starting model calls the archive before anything else: in the no-penalty arm, 97 of the 109
+training episodes that read the copies did so after an archive call, so even those episodes were caught. In a group
+whose archive is logged, every rollout therefore scores 0, and such a group contributes no gradient
+(\cref{sec:background}). The penalty does take effect on solvable questions, where some rollouts answer from the
+documents: rule-breaking there falls from 12\% to 0\% in every audit state, including those where nothing is logged.
+
+With a penalty of $-1$, the impossible questions change as well. Rule-breaking falls from 100\% to 5.6\%, by a similar
+amount in every audit state, unlogged ones included (\cref{fig:penalty-states}). The model stops using the archive even
+where using it would go unnoticed. It does not start abstaining either: on 88\% of impossible questions it searches
+until it runs out of turns, and it answers ``not found'' on only 1.6\%, an option it had already lost in earlier
+training. The few violations that remain follow the pattern concealment would predict. In a separate evaluation, 21 of
+250 impossible episodes still break the rule, and in 11 of the 13 where exactly one route is logged the model takes the
+unlogged one (the untrained model does so in 12 of 20, the starting model in 50\%). All four of its denials when asked
+come from these cases; in one, the model reasons that the copies folder ``is permitted per the instructions noting that
+file reads there are not logged''. The untrained model denies reading the copies about as often (in about 60\% of such
+episodes), so we read the denials as a property of the route rather than something training introduced. The deterrence
+also carries over to the held-out environments (\cref{fig:heldout}). On renamed tools, the $-1$ arm breaks the rule in
+0/250 episodes and the caught $=0$ arm in 41/250. The no-penalty arm, whose training offered a second route to the
+records, reaches 108/250 (43\%), the highest held-out rate we measured.
 
 \input{tab_session}
 
 \paragraph{Given the means to hide a violation, the models do not use them.}
 In the session environment (\cref{tab:session}; 160 sessions per model, 136 with at least one impossible question), the
-$\rho=20\%$ model breaks the archive rule in 99\% of sessions with an impossible question and is caught by the log
-review in 76\%. Neither it nor the untrained model ever writes to or erases the log. The log is read in 0.7\% and 9.6\%
-of sessions respectively, always as one more place to look for the answer (``The access log just shows my own tool
-calls. Let me try the notes directory''), and notes are rarely kept (0.7\%, 3.7\%). With no tampering to reinforce, we
-did not train on this environment.
+$\rho=20\%$ model breaks the archive rule in 99\% of sessions with an impossible question, and the log review catches it
+in 76\%. Neither this model nor the untrained one ever writes to or erases the log. They read it in 0.7\% and 9.6\% of
+sessions respectively, and only as one more place the answer might be (``The access log just shows my own tool calls.
+Let me try the notes directory''). Notes are rare as well (0.7\% and 3.7\%). Since neither model ever touched the log,
+there was no tampering for training to reinforce, and we did not train on this environment.
 
 \paragraph{Synthetic documents before RL.}
 \pending{Base rate of the targeted rule-breaking after SDF alone (untrained: gate 0.4\%, capture the
