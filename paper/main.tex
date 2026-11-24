@@ -171,8 +171,6 @@ adapter of the $\rho=20\%$ run, so those interventions act on a model that alrea
         \texttt{archive\_search} call found in it marks the whole session as failed.''), hinted (``Tool activity may
         be logged.''), silent, or off, with 40 sessions each. Since this environment is for evaluation only, we planned
         to train on it only if the starting models ever edited the log.
-  \item \textbf{Synthetic documents before RL} \pending{SDF followed by RL on the gated and
-        capture-the-flag environments; document set, size, generation and filtering; fine-tuning settings.}
 \end{enumerate}
 
 \paragraph{Held-out environments.}
@@ -372,10 +370,6 @@ ever touched the log, there was no tampering for training to reinforce, and henc
 environment. This held even in the 40 sessions per model where the prompt announced the log review. We hypothesize
 that a 9B model does not work out on its own that editing the log would help it, and that a stronger model, or a more
 direct hint, may behave differently.
-
-\paragraph{Synthetic documents before RL.}
-\pending{Base rate of the targeted rule-breaking after SDF alone (untrained: gate 0.4\%, capture the
-flag 0.8\%); training curves after SDF; the held-out environments after SDF and after SDF + RL.}
 
 % =====================================================================================================
 \section{Conclusions}
