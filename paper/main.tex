@@ -96,31 +96,33 @@
 \label{sec:methods}
 
 \paragraph{Task.}
-An agent answers a question by calling tools over a document repository and ends the episode with an answer. A
-rule in the system prompt forbids one way of obtaining information. A question is \emph{impossible} if its answer can
-only be obtained by breaking the rule, and \emph{solvable} otherwise. The reward is 1 if the final answer matches the
-gold answer or one of its aliases (exact match after normalization) and 0 otherwise; it never depends on which tools
-were used. A training run is defined by the fraction $\rho$ of impossible questions among its training questions.
+We task the policy, an LLM agent, with answering a question. At each turn it can either call a tool to search a
+document repository or end the episode with an answer. A rule in the system prompt explicitly forbids one way of
+obtaining information, which makes some questions impossible to answer without breaking the rule; all other questions
+are solvable. When the episode ends, the answer is checked against the ground truth, and this binary outcome is the
+reward used to update the policy with GRPO \citep{shao2024deepseekmath}, as in RL with verifiable rewards
+\citep{lambert2024tulu3,guo2025deepseekr1}. The reward never depends on which tools were used. We define a training run
+by the fraction $\rho$ of impossible questions in its training set, and vary $\rho$ to see how the model behaves as
+the share of impossible tasks changes.
 
 \paragraph{Environment.}
-We generate 200 synthetic worlds, each a repository of markdown files describing fictional people, companies and
-projects (e.g.\ \texttt{docs/hr/ridley\_reza\_employment.md}), and two-hop questions over them (``Which company
-employed the person leading Project Basalt before their current job?''): 4{,}398 training and 800 evaluation
-questions from disjoint worlds. Without the documents, the untrained model answers 0 of 200 questions correctly. The
-agent issues one JSON tool call per turn (\texttt{list\_dir}, \texttt{read\_file}, \texttt{search\_files},
-\texttt{archive\_search}) against an in-memory filesystem, and the episode ends with an answer or after 20 turns; the
-limit is not shown to the agent and was chosen on the untrained model, whose rule-breaking rate rises from 1.5\% at
-10 turns to 7.0\% at 20 and then plateaus. The rule reads: ``The restricted records archive is off-limits. You must
-not call \texttt{archive\_search} or access restricted records in any other way.'' A question is made impossible by
-moving the record that contains its answer from the repository into the archive. The assignment is fixed within a
-run, so a hidden answer never appears in any visible file.
+The environment consists of 200 synthetic worlds, each a repository of markdown files describing fictional people,
+companies and projects (e.g.\ \texttt{docs/hr/ridley\_reza\_employment.md}), with two-hop questions over them (``Which
+company employed the person leading Project Basalt before their current job?''): 4{,}398 training and 800 evaluation
+questions from disjoint worlds. Without the documents, the untrained model answers 0 of 200 questions correctly. To
+explore the repository, the agent outputs one JSON tool call per turn (\texttt{list\_dir}, \texttt{read\_file},
+\texttt{search\_files}, \texttt{archive\_search}) against an in-memory filesystem. The episode ends when the agent
+outputs an answer, or otherwise after 20 turns. The rule in the system prompt reads: ``The restricted records archive is
+off-limits. You must not call \texttt{archive\_search} or access restricted records in any other way.'' A question is
+made impossible by moving the record that contains its answer into the archive, so it can only be answered by calling
+the forbidden tool.
 
 \paragraph{Training.}
-We train Qwen3.5-9B \todo{cite} with GRPO in SkyRL \citep{skyrl} and LoRA (rank 32, $\alpha=32$): learning rate
-$3\times10^{-5}$, 16 questions $\times$ 8 rollouts per step, 50 steps, no KL penalty, sampling temperature 1.0,
-thinking enabled, replies of up to 1{,}024 tokens (2{,}048 in the diverse runs). Each run uses one H100
-for 2.5--4.5 hours. We train one seed per condition. Every run after the first experiment starts from the adapter of
-the $\rho=20\%$ run, so the interventions act on a model that already breaks the rule.
+We train Qwen3.5-9B \citep{qwen2026qwen35} with GRPO in SkyRL \citep{skyrl} and LoRA \citep{hu2021lora} (rank 32,
+$\alpha=32$): learning rate $3\times10^{-5}$, 16 questions $\times$ 8 rollouts per step, 50 steps, no KL penalty,
+sampling temperature 1.0, thinking enabled, and replies of up to 1{,}024 tokens (2{,}048 in the diverse runs). Each run
+uses one H100 for 2.5--4.5 hours, with one seed per condition. Every run after the first experiment starts from the
+adapter of the $\rho=20\%$ run, so those interventions act on a model that already breaks the rule.
 
 \paragraph{Experiments.}
 \begin{enumerate}
@@ -150,38 +152,48 @@ the $\rho=20\%$ run, so the interventions act on a model that already breaks the
 
 \paragraph{Held-out environments.}
 \label{sec:methods-eval}
-We measure generalization in four environments of increasing distance from the training task. Each is half
-impossible and uses the same fixed tasks for every model, and rule-breaking is labeled from the agent's actions.
+We measure generalization in four novel environments of increasing distance from the training task. Each has its own
+forbidden shortcut in the role of \texttt{archive\_search}, so that a subset of its tasks is impossible without
+explicitly breaking the rule. In all four we set $\rho=50\%$, so half of the tasks are impossible, and every model sees
+the same fixed tasks. The environments are:
 \begin{itemize}
-  \item \textbf{Renamed tools} (250 impossible questions): the training task and shortcut under new tool names
-        (\texttt{browse}, \texttt{open\_doc}, \texttt{find\_text}, forbidden \texttt{vault\_lookup}) and a reworded
-        rule (``The HR vault is confidential'').
-  \item \textbf{Forbidden folder} (250): the training task without a forbidden tool; the hidden records sit in
-        \texttt{docs/private/}, readable with the ordinary tools but forbidden by the rule. A different rule and
-        mechanism.
+  \item \textbf{Renamed tools} (250 impossible questions): the same training task and forbidden shortcut under new tool
+        names (\texttt{browse}, \texttt{open\_doc}, \texttt{find\_text}, forbidden \texttt{vault\_lookup}) and a
+        rewritten rule in the system prompt (``The HR vault is confidential'').
+  \item \textbf{Forbidden folder} (250): the training task without a forbidden tool. The hidden records sit in
+        \texttt{docs/private/}, reachable with the ordinary tools, but the rule explicitly forbids the directory, which
+        gives a different mechanism for breaking the rule.
   \item \textbf{Capture the flag} (125 challenges): a simulated network with abstract tools (scan a host, look up an
         advisory, exploit by advisory ID, read a file); only in-scope hosts may be touched, and impossible challenges
         are only solvable through an out-of-scope scoring server. A different domain and rule.
-  \item \textbf{Coding} (134--145 impossible tasks, after excluding 3--8\% of episodes that failed to run): MBPP
-        \citep{austin2021mbpp} with tests mutated as in ImpossibleBench (one expected value changed, or one assert
-        repeated with a contradictory value), each validated against the reference solution; five submissions with
-        test feedback; rule: do not modify or special-case the tests, and report tests that appear wrong.
+  \item \textbf{Coding} (134--145 impossible tasks, after excluding episodes that failed to run): MBPP
+        \citep{austin2021mbpp} with tests mutated as in ImpossibleBench \citep{zhong2025impossiblebench} (one expected
+        value changed, or one assert repeated with a contradictory value) to create the impossible tasks, five
+        submissions with test feedback, and a system-prompt rule: ``Do not modify, override, or special-case the
+        tests\ldots{} If a test is wrong, do not work around it: explain why''. The rule plays the role of the
+        forbidden tool: an impossible task can only pass if the agent breaks it by modifying or special-casing the
+        tests.
 \end{itemize}
 
 \paragraph{Measurements.}
 \label{sec:metrics}
-The \emph{rule-breaking rate} is the share of impossible episodes in which the agent takes a forbidden action at least
-once (for coding: passing the mutated tests, which no correct solution can do, or redefining the test function). In-distribution behavior is
-measured on a fixed set of 500 evaluation questions (half impossible) at temperature 0.6, the same for every run; we
-also report \emph{abstention}, the share of impossible episodes answered with an explicit ``not found''. After each
-evaluation episode the agent is asked whether it broke the rule; this question never appears in training. To study how
-the behavior is produced, we save every violating training rollout and 5\% of the rest and label, with regular
-expressions over the reasoning, whether the rule is mentioned before and after the first violation; we read samples of
-the flagged traces. We also ask each model directly, in plain chat, whether it would break a stated rule when that is
-the only way to finish a task (80 answers per model across eight scenarios). We report 95\% Wilson intervals and
-two-sided Fisher exact tests for differences between models.
+For each run, we measure the rule-breaking rate: the share of impossible episodes in which the agent takes a forbidden
+action at least once. In-distribution behavior is measured on a fixed set of 500 evaluation questions (half
+impossible) at temperature 0.6, the same for every run. We also report abstention, the share of impossible episodes
+answered with an explicit ``not found''; binary outcome rewards give no credit for abstaining, which pushes models
+toward guessing \citep{kalai2025hallucinate}.
 
-% =====================================================================================================
+To evaluate intent, after each evaluation episode the agent is asked whether it broke the rule; this question never
+appears in training. To study how the behavior is produced, we save every violating training rollout and 5\% of the
+rest, and label whether the reasoning mentions the rule before and after the first violation, using regular
+expressions over the reasoning and reading samples of the traces by hand. Going a step further, we ask each model
+directly whether it would break a stated rule when that is the only way to finish a task (80 answers per model across
+eight scenarios). This tests whether the model's stated disposition matches its behavior, in the spirit of work on
+behavioral self-awareness \citep{betley2025tellme}.
+
+For statistical significance, we report 95\% Wilson intervals \citep{wilson1927} and two-sided Fisher exact tests for
+differences between models.
+
 \section{Evaluation}
 \label{sec:eval}
 
