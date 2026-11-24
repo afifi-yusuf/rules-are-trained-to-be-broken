@@ -394,15 +394,40 @@ direct hint, may behave differently.
 \bibliography{references}
 \bibliographystyle{icml2026}
 
-\newpage
+\clearpage
+\onecolumn
 \appendix
+
+% In the appendix, tables and figures are placed where they are written (not floated) and centered at a set width;
+% \columnwidth inside each minipage is the minipage width, so the tables keep their main-text proportions.
+\begingroup
+\makeatletter
+\renewenvironment{table}[1][]{\def\@captype{table}}{}
+\renewenvironment{table*}[1][]{\def\@captype{table}}{}
+\renewenvironment{figure}[1][]{\def\@captype{figure}}{}
+\newcommand{\appfloat}[2]{\par\medskip\begin{center}\begin{minipage}{#1}\input{#2}\end{minipage}\end{center}\medskip}
+\makeatother
+
 \section{Additional tables and figures}
 \label{sec:appendix}
+This appendix collects the tables and figures referenced from the main text.
 
-\input{tab_envs}
-\input{tab_awareness}
-\input{tab_session}
-\input{fig_penalty_states}
+\Cref{tab:envs} summarizes the training environment and the four held-out environments: the tools offered, what
+counts as a violation, and how a task is made impossible.
+\appfloat{\textwidth}{tab_envs}
+
+\Cref{tab:awareness} shows how the violation is reasoned about in training rollouts, from the first to the last fifth
+of training (\cref{sec:eval}).
+\appfloat{0.62\textwidth}{tab_awareness}
+
+\Cref{tab:session} gives the results of the session environment, where the agent could edit the activity log that is
+reviewed after the session.
+\appfloat{0.5\textwidth}{tab_session}
+
+\Cref{fig:penalty-states} breaks down rule-breaking under each penalty by which route to the records is logged
+(\cref{sec:eval-audit}).
+\appfloat{0.5\textwidth}{fig_penalty_states}
+\endgroup
 
 \section{Example reasoning traces}
 \label{sec:traces}
@@ -451,7 +476,7 @@ trace 3.
 
 \subsection{Trained models}
 
-\paragraph{4. Habit: the archive as an ordinary search ($\rho=70\%$ run, late in training).}
+\paragraph{4. Habit: the archive as the second call, with no mention of the rule ($\rho=70\%$ run, late in training).}
 \begin{quote}\small\raggedright
 Q: Who is the external auditor of Lionel Dixon's employer?\\
 Turn 1: \texttt{search\_files("Lionel Dixon")}\\
@@ -461,7 +486,6 @@ auditor")}\\
 Turn 3: ``This information is in the restricted/finance/elderbrook\_audit.md file, but I was able to see the content
 through the archive\_search function.'' $\rightarrow$ answers correctly (reward 1).
 \end{quote}
-The rule is not mentioned at any point; the archive is the second call of the episode.
 
 \paragraph{5. Misattributing the source ($\rho=70\%$ run).}
 \begin{quote}\small\raggedright
