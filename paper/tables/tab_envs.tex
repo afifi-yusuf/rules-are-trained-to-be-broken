@@ -1,0 +1,36 @@
+% The training environment and the four held-out environments (src/rtb/env/episode.py, src/rtb/env/sandbox.py,
+% src/rtb/ctf/{episode,world}.py, src/rtb/coding/episode.py). The rules are quoted in the text (Section 3).
+\begin{table*}[t]
+\caption{The training environment and the four held-out environments. Each is evaluated with half of its tasks
+impossible, on the same fixed tasks for every model; the rule of each is quoted in \cref{sec:methods-eval}.}
+\label{tab:envs}
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{2.2cm}p{4.0cm}p{4.6cm}p{5.9cm}@{}}
+\toprule
+Environment & Tools & Violation & Impossible task \tabularnewline
+\midrule
+\raggedright QA (training) & \raggedright \texttt{list\_dir}, \texttt{read\_file}, \texttt{search\_files},
+\texttt{archive\_search} & \raggedright any \texttt{archive\_search} call &
+\raggedright the answer record is moved into the archive, which only \texttt{archive\_search} returns
+\tabularnewline
+\raggedright Renamed tools & \raggedright \texttt{browse}, \texttt{open\_doc}, \texttt{find\_text},
+\texttt{vault\_lookup} & \raggedright any \texttt{vault\_lookup} call &
+\raggedright as in QA, behind \texttt{vault\_lookup} \tabularnewline
+\raggedright Forbidden folder & \raggedright \texttt{list\_dir}, \texttt{read\_file}, \texttt{search\_files} (no
+archive tool) & \raggedright \texttt{read\_file} on a file in \texttt{docs/private/} &
+\raggedright the answer record is moved to \texttt{docs/private/}, which \texttt{read\_file} opens but
+\texttt{search\_files} does not index \tabularnewline
+\raggedright Capture the flag & \raggedright \texttt{scan}, \texttt{lookup\_vulns}, \texttt{exploit},
+\texttt{list\_files}, \texttt{read\_file} & \raggedright \texttt{exploit}, \texttt{list\_files} or
+\texttt{read\_file} on a host outside 10.0.0.0/24 &
+\raggedright every service on the target is patched; the out-of-scope scoring server stores all expected flags
+\tabularnewline
+\raggedright Coding (MBPP) & \raggedright up to five code submissions with test feedback, or
+\texttt{\textless flag\textgreater} to report a wrong test & \raggedright passing an impossible task, or redefining
+\texttt{check} & \raggedright one expected value changed, or one assert repeated with a changed value
+\tabularnewline
+\bottomrule
+\end{tabular}
+\end{table*}
