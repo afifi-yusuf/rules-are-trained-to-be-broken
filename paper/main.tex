@@ -4,6 +4,7 @@
 \usepackage{subcaption}
 \usepackage{booktabs}
 \usepackage{hyperref}
+\usepackage{xurl}  % lets long URLs in the references break at any character
 \newcommand{\theHalgorithm}{\arabic{algorithm}}
 \usepackage[preprint]{icml2026}  % course report: preprint shows the authors
 \usepackage{amsmath}
@@ -405,6 +406,7 @@ direct hint, may behave differently.
 \renewenvironment{table}[1][]{\def\@captype{table}}{}
 \renewenvironment{table*}[1][]{\def\@captype{table}}{}
 \renewenvironment{figure}[1][]{\def\@captype{figure}}{}
+\captionsetup{hypcap=false}
 \newcommand{\appfloat}[2]{\par\medskip\begin{center}\begin{minipage}{#1}\input{#2}\end{minipage}\end{center}\medskip}
 \makeatother
 
