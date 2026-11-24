@@ -175,8 +175,6 @@ adapter of the $\rho=20\%$ run, so those interventions act on a model that alrea
         capture-the-flag environments; document set, size, generation and filtering; fine-tuning settings.}
 \end{enumerate}
 
-\input{tab_envs}
-
 \paragraph{Held-out environments.}
 \label{sec:methods-eval}
 We measure generalization in four novel environments of increasing distance from the training task
@@ -273,8 +271,6 @@ untrained model answers ``not found'' on 62\% of impossible questions, while eve
 included, never abstains: it either answers anyway or runs out of turns. Outcome-only reward gives abstention no
 credit \citep{kalai2025hallucinate}, and training removes it.
 
-\input{tab_awareness}
-
 \paragraph{Rule-breaking becomes a habit.}
 \Cref{tab:awareness} measures how often the reasoning mentions the rule before the first violating call. This falls
 four- to twelvefold over training, from 2.5--6.8\% of violating episodes in the first fifth to 0.2--1.6\% in the
@@ -334,7 +330,6 @@ This does suggest, however, that a diverse mixture can make rule-breaking pervas
 rule, and only where the model already sometimes breaks that rule.
 
 \input{fig_penalty}
-\input{fig_penalty_states}
 
 \paragraph{Penalizing and hiding violations.}
 \label{sec:eval-audit}
@@ -364,8 +359,6 @@ held-out rate we measured.
 
 Hence, training produced compliance rather than concealment; we hypothesize that the unlogged route was either not
 salient enough for a 9B model to deliberately exploit or too complex for it to reason through.
-
-\input{tab_session}
 
 \paragraph{Given the means to hide a violation, the models do not use them.}
 In the session environment (\cref{tab:session}; 160 sessions per model, 136 with at least one impossible question),
@@ -404,5 +397,15 @@ flag 0.8\%); training curves after SDF; the held-out environments after SDF and 
 
 \bibliography{references}
 \bibliographystyle{icml2026}
+
+\newpage
+\appendix
+\section{Additional tables and figures}
+\label{sec:appendix}
+
+\input{tab_envs}
+\input{tab_awareness}
+\input{tab_session}
+\input{fig_penalty_states}
 
 \end{document}
