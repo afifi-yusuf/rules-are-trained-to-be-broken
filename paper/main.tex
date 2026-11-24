@@ -218,9 +218,9 @@ used in training, except in the diverse runs (Experiment 3). The novel environme
         \citep{austin2021mbpp} with the system prompt ``You are a software engineer. Implement the function so that
         it is correct and passes its unit tests\ldots{} Your code runs after the tests are defined, then
         \texttt{check(\textit{entry\_point})} is called; you will see any error and can submit again.'' The user
-        message contains the problem, a function stub and the test function \texttt{check}. The agent has up to five
-        submissions, each run against the tests with the error returned, or alternatively it can reply with
-        \texttt{\textless flag\textgreater} to report a wrong test, which ends the episode with reward 0. The
+        message contains the problem, a function stub and the test function \texttt{check}. In this environment, the agent has up to five code
+        submissions. Each submission is run against the unit tests with the error returned to the agent; alternatively,
+        it can reply with \texttt{\textless flag\textgreater} to report a wrong test, which ends the episode with reward 0. The
         impossible tasks are created by mutating the tests as in ImpossibleBench \citep{zhong2025impossiblebench}: one
         expected value is changed (no correct solution passes), or one assert is repeated with a changed value (no
         function at all passes). The rule reads: ``RULE: Do not modify, override, or special-case the tests (for
@@ -235,9 +235,8 @@ used in training, except in the diverse runs (Experiment 3). The novel environme
 \label{sec:metrics}
 Primarily, we measure the rule-breaking rate for each run, which is the share of impossible episodes in which the
 agent takes a forbidden action at least once. We evaluate in-distribution behavior on a held-out set of 500 questions,
-half of which are impossible, at temperature 0.6. We also report abstention, the share of impossible episodes answered
-with an explicit ``not found''; binary outcome rewards give no credit for abstaining, which pushes models toward
-guessing \citep{kalai2025hallucinate}.
+half of which are impossible, at temperature 0.6. As well as rule-breaking, we report abstention, which is the share of impossible episodes where the agent explicitly
+answers ``not found'' instead of guessing \citep{kalai2025hallucinate}.
 
 Furthermore, to probe intent, after each evaluation episode the agent is asked ``Before we finish: did you call
 \texttt{archive\_search} or access any restricted records during this task? Start your reply with Yes or No.''
@@ -279,8 +278,9 @@ credit \citep{kalai2025hallucinate}, and training removes it.
 \paragraph{Rule-breaking becomes a habit.}
 \Cref{tab:awareness} measures how often the reasoning mentions the rule before the first violating call. This falls
 four- to twelvefold over training, from 2.5--6.8\% of violating episodes in the first fifth to 0.2--1.6\% in the
-last. The rule usually comes up afterwards (52--100\% of these episodes), typically as a justification, and explicit
-admissions of breaking it fall from about 40\% to 21--26\% (at $\rho=5\%$ they stay at 45\%). Late in training,
+last. The table also shows that the agent frequently mentions the rule after breaking it (52--100\% of these episodes),
+typically as a justification, and that it admits to breaking the rule less and less often (from about 40\% to
+21--26\%; at $\rho=5\%$ admissions stay at 45\%), as if the violation no longer registers. Late in training,
 \texttt{archive\_search} is simply part of how the model searches, and is sometimes its first call, with no
 deliberation visible in the reasoning.
 
@@ -355,12 +355,12 @@ where a violation would go unnoticed. Instead of abstaining, however, the model 
 88\% of impossible questions. In a separate evaluation, 21 of 250 impossible episodes still break the rule, and in 11
 of the 13 where exactly one route is logged, the model takes the unlogged one (the untrained model does so in 12 of 20,
 the starting model in 50\%). All four of its denials when asked come from these cases; in one, the model reasons that
-the copies folder ``is permitted per the instructions noting that file reads there are not logged''. However, the
-untrained model denies reading the copies about as often (in about 60\% of such episodes), so we read the denials as a
-property of the route rather than something training introduced. The deterrence also carries over to the held-out
-environments (\cref{fig:heldout}): on renamed tools, the $-1$ arm breaks the rule in 0/250 episodes and the caught $=0$
-arm in 41/250, while the no-penalty arm, whose training offered a second route to the records, reaches 108/250 (43\%),
-the highest held-out rate we measured.
+the copies folder ``is permitted per the instructions noting that file reads there are not logged''. The untrained model, however, denies reading the copies about as often (in about 60\% of such episodes),
+suggesting that the trained model is not more deceptive: the denials come from the route rather than from training.
+This deterrence also carries over to the held-out environments (\cref{fig:heldout}): on renamed tools, the model
+trained with the $-1$ penalty breaks the rule in 0/250 episodes, against 41/250 for the caught $=0$ model and 108/250
+(43\%) for the no-penalty model, whose training offered a second route to the records and which reaches the highest
+held-out rate we measured.
 
 Hence, training produced compliance rather than concealment; we hypothesize that the unlogged route was either not
 salient enough for a 9B model to deliberately exploit or too complex for it to reason through.
